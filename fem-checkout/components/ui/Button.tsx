@@ -20,11 +20,11 @@ export default function Button({
 }: ButtonProps) {
   const base = `
     inline-flex items-center justify-center gap-2
-    font-semibold rounded-xl px-6 py-4
-    transition-all duration-200 ease-in-out
+    font-semibold rounded-lg px-6 py-4
+    transition-all duration-150 ease-in-out
     focus:outline-none focus:ring-2 focus:ring-offset-2
     disabled:opacity-60 disabled:cursor-not-allowed
-    active:scale-[0.98]
+    active:scale-[0.99]
     ${fullWidth ? "w-full" : ""}
   `;
 

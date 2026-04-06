@@ -88,7 +88,7 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
 
   if (submitted) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center animate-fade-in-up space-y-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+      <div className="flex flex-col items-center justify-center py-16 text-center space-y-4 bg-white rounded-lg border border-gray-200 p-8">
         <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mb-2">
           <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -111,23 +111,23 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
       <PaymentSection register={register} errors={errors} watch={watch} />
 
       {/* Billing address toggle */}
-      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6">
+      <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
         <h3 className="font-semibold text-gray-900 mb-3 text-sm">Dirección de facturación</h3>
-        <div className="flex items-center gap-3 bg-[#fff8f8] rounded-xl border border-[#ffa69e]/20 p-4">
-          <div className="w-5 h-5 rounded-full border-2 border-[#fc5245] bg-[#fc5245] flex items-center justify-center flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-white" />
+        <div className="flex items-center gap-3 bg-gray-50 rounded-md border border-gray-200 p-3.5">
+          <div className="w-4 h-4 rounded-full border-2 border-[#fc5245] flex items-center justify-center flex-shrink-0">
+            <div className="w-2 h-2 rounded-full bg-[#fc5245]" />
           </div>
           <span className="text-sm text-gray-700">Usar la misma dirección de envío</span>
         </div>
       </section>
 
       {/* Submit CTA */}
-      <div className="sticky bottom-0 pb-4 pt-2 bg-[#f7f4f4]">
+      <div className="sticky bottom-0 pb-4 pt-2 bg-[#f5f5f5]">
         <Button
           type="submit"
           fullWidth
           loading={isSubmitting}
-          className="text-base py-4 shadow-lg shadow-[#fc5245]/25"
+          className="text-base py-4"
         >
           {isSubmitting ? "Procesando..." : (
             <span className="flex items-center gap-2">
@@ -138,8 +138,11 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
             </span>
           )}
         </Button>
-        <p className="text-center text-xs text-gray-400 mt-2">
-          🔒 Transacción 100% segura y encriptada
+        <p className="text-center text-xs text-gray-500 mt-2 flex items-center justify-center gap-1">
+          <svg className="w-3 h-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Transacción 100% segura y encriptada
         </p>
       </div>
     </form>

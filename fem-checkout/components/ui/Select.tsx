@@ -21,14 +21,14 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={ref}
             className={`
-              w-full px-4 py-3.5 rounded-xl border bg-white
+              w-full px-4 py-3 rounded-md border bg-white
               text-gray-900
-              transition-all duration-200 ease-in-out
+              transition-colors duration-150
               cursor-pointer
               ${
                 error
-                  ? "border-red-400 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-200"
-                  : "border-gray-200 hover:border-[#ffa69e] focus:border-[#ffa69e] focus:ring-2 focus:ring-[#ffa69e]/25"
+                  ? "border-red-400 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-300"
+                  : "border-gray-300 hover:border-gray-400 focus:border-[#fc5245] focus:ring-1 focus:ring-[#fc5245]/20"
               }
               focus:outline-none
               disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed

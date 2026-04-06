@@ -42,9 +42,9 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
   };
 
   return (
-    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 sm:p-6 animate-fade-in-up">
+    <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
       <div className="flex items-center gap-2.5 mb-5">
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#ffa69e] to-[#fc5245] flex items-center justify-center shadow-sm">
+        <div className="w-6 h-6 rounded-full bg-[#fc5245] flex items-center justify-center flex-shrink-0">
           <span className="text-white text-xs font-bold">2</span>
         </div>
         <h2 className="font-semibold text-gray-900">Dirección de entrega</h2>

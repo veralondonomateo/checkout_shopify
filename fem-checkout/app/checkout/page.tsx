@@ -22,7 +22,7 @@ const TOTAL = SUBTOTAL; // Free shipping = no shipping added
 
 export default function CheckoutPage() {
   return (
-    <div className="min-h-screen bg-[#f7f4f4] flex flex-col">
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
       <CheckoutHeader />
 
       {/* Mobile summary toggle */}

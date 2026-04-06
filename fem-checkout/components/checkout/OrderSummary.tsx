@@ -27,7 +27,6 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
 
   const handleApplyCoupon = () => {
     if (!coupon.trim()) return;
-    // Demo logic — connect to your backend
     if (coupon.toUpperCase() === "FEM10") {
       setCouponApplied(true);
       setCouponError("");
@@ -37,22 +36,22 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
   };
 
   return (
-    <div className="bg-[#fff8f8] rounded-2xl border border-[#ffa69e]/20 p-5 sm:p-6 space-y-5">
+    <div className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6 space-y-5">
       {/* Items */}
       <div className="space-y-4">
         {items.map((item) => (
-          <div key={item.id} className="flex items-start gap-3.5">
+          <div key={item.id} className="flex items-start gap-3">
             <div className="relative flex-shrink-0">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-white border border-[#ffa69e]/20 shadow-sm">
+              <div className="w-14 h-14 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
                 <Image
                   src={item.image}
                   alt={item.name}
-                  width={64}
-                  height={64}
+                  width={56}
+                  height={56}
                   className="w-full h-full object-cover"
                 />
               </div>
-              <span className="absolute -top-2 -right-2 bg-[#fc5245] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+              <span className="absolute -top-1.5 -right-1.5 bg-[#fc5245] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                 {item.quantity}
               </span>
             </div>
@@ -69,7 +68,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
         ))}
       </div>
 
-      <div className="border-t border-[#ffa69e]/20" />
+      <div className="border-t border-gray-100" />
 
       {/* Coupon */}
       <div>
@@ -80,31 +79,31 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
             onChange={(e) => { setCoupon(e.target.value); setCouponError(""); }}
             placeholder="Código de descuento"
             className={`
-              flex-1 px-3.5 py-2.5 rounded-xl border text-sm bg-white
+              flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white
               placeholder-gray-400 text-gray-900
-              focus:outline-none focus:ring-2 focus:ring-[#ffa69e]/25 focus:border-[#ffa69e]
-              transition-all duration-200
-              ${couponError ? "border-red-300" : "border-gray-200"}
-              ${couponApplied ? "border-green-300 bg-green-50" : ""}
+              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245]
+              transition-colors duration-150
+              ${couponError ? "border-red-300" : "border-gray-300"}
+              ${couponApplied ? "border-green-400 bg-green-50" : ""}
             `}
             disabled={couponApplied}
           />
           <button
             onClick={handleApplyCoupon}
             disabled={couponApplied || !coupon.trim()}
-            className="px-4 py-2.5 rounded-xl bg-[#ffa69e]/20 text-[#fc5245] text-sm font-semibold hover:bg-[#ffa69e]/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {couponApplied ? "✓" : "Aplicar"}
           </button>
         </div>
         {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
-        {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">🎉 Código aplicado: -10%</p>}
+        {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado: -10%</p>}
       </div>
 
-      <div className="border-t border-[#ffa69e]/20" />
+      <div className="border-t border-gray-100" />
 
       {/* Totals */}
-      <div className="space-y-2.5">
+      <div className="space-y-2">
         <div className="flex justify-between text-sm text-gray-600">
           <span>Subtotal</span>
           <span className="font-medium text-gray-900">{formatCOP(subtotal)}</span>
@@ -114,7 +113,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
           <span>Envío</span>
           <div className="flex items-center gap-2">
             <span className="line-through text-gray-400">{formatCOP(shipping)}</span>
-            <span className="text-green-600 font-semibold text-xs bg-green-50 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
               GRATIS
             </span>
           </div>
@@ -128,21 +127,21 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
         )}
       </div>
 
-      <div className="border-t border-[#ffa69e]/20" />
+      <div className="border-t border-gray-200" />
 
       {/* Total */}
       <div className="flex justify-between items-center">
         <span className="font-semibold text-gray-900">Total</span>
         <div className="text-right">
-          <p className="text-xs text-gray-500 mb-0.5">COP</p>
-          <p className="text-2xl font-bold text-[#fc5245]">
+          <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">COP</p>
+          <p className="text-xl font-bold text-gray-900">
             {formatCOP(couponApplied ? total - subtotal * 0.1 : total)}
           </p>
         </div>
       </div>
 
       {/* Trust badges */}
-      <div className="border-t border-[#ffa69e]/20 pt-4">
+      <div className="border-t border-gray-100 pt-4">
         <div className="grid grid-cols-3 gap-2 text-center">
           {[
             { icon: "🚚", text: "Envío rápido" },
@@ -150,7 +149,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
             { icon: "🇨🇴", text: "Hecho en Colombia" },
           ].map(({ icon, text }) => (
             <div key={text} className="flex flex-col items-center gap-1">
-              <span className="text-lg">{icon}</span>
+              <span className="text-base">{icon}</span>
               <span className="text-[10px] text-gray-500 font-medium leading-tight">{text}</span>
             </div>
           ))}
