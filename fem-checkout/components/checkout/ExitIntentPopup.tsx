@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export default function ExitIntentPopup() {
+export default function ExitIntentPopup({ couponApplied = false }: { couponApplied?: boolean }) {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
   const triggered = useRef(false); // guards against multiple fires
 
   useEffect(() => {
-    if (sessionStorage.getItem("fem-exit-shown")) return;
+    if (sessionStorage.getItem("fem-exit-shown") || couponApplied) return;
 
     // Detect touch device
     const isMobile = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
@@ -73,7 +73,7 @@ export default function ExitIntentPopup() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!show) return null;
+  if (!show || couponApplied) return null;
 
   return (
     /* Mobile: bottom sheet · Desktop: centered modal */

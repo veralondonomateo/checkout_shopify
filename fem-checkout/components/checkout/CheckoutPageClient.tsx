@@ -26,7 +26,7 @@ const UPSELL_PRODUCTS: UpsellProduct[] = [
     name: "Jabón íntimo FEM",
     variant: "200 ml · pH neutro",
     price: 35000,
-    image: "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=200&q=80",
+    image: "https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Jabon-intimo-fem.webp?v=1772573021",
     benefit: "Higiene íntima con pH balanceado",
     stock: 7,
     soldToday: 14,
@@ -36,7 +36,7 @@ const UPSELL_PRODUCTS: UpsellProduct[] = [
     name: "Óvulos FEM",
     variant: "10 unidades · Probióticos",
     price: 45000,
-    image: "https://images.unsplash.com/photo-1550572017-edd951b55104?w=200&q=80",
+    image: "https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Ovulos.jpg?v=1755895009",
     benefit: "Restaura la flora vaginal naturalmente",
     stock: 5,
     soldToday: 9,
@@ -113,7 +113,7 @@ export default function CheckoutPageClient() {
         total={total}
       />
 
-      <ExitIntentPopup />
+      <ExitIntentPopup couponApplied={couponApplied} />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 items-start">
