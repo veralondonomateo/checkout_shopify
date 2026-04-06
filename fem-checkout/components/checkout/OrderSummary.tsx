@@ -8,12 +8,12 @@ interface OrderSummaryProps {
   subtotal: number;
   shipping: number;
   total: number;
-  coupon: string;
-  couponApplied: boolean;
-  couponError: string;
-  discount: number;
-  onCouponChange: (value: string) => void;
-  onCouponApply: () => void;
+  coupon?: string;
+  couponApplied?: boolean;
+  couponError?: string;
+  discount?: number;
+  onCouponChange?: (value: string) => void;
+  onCouponApply?: () => void;
 }
 
 function formatCOP(n: number) {
@@ -27,7 +27,7 @@ function formatCOP(n: number) {
 
 export default function OrderSummary({
   items, subtotal, shipping, total,
-  coupon, couponApplied, couponError, discount,
+  coupon = "", couponApplied = false, couponError = "", discount = 0,
   onCouponChange, onCouponApply,
 }: OrderSummaryProps) {
   return (
@@ -58,32 +58,36 @@ export default function OrderSummary({
       <div className="border-t border-gray-100" />
 
       {/* Coupon */}
-      <div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={coupon}
-            onChange={(e) => onCouponChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
-            placeholder="Código de descuento"
-            className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
-              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors duration-150
-              ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
-            disabled={couponApplied}
-          />
-          <button
-            onClick={onCouponApply}
-            disabled={couponApplied || !coupon.trim()}
-            className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {couponApplied ? "✓" : "Aplicar"}
-          </button>
-        </div>
-        {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
-        {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado</p>}
-      </div>
+      {onCouponChange && onCouponApply && (
+        <>
+          <div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={coupon}
+                onChange={(e) => onCouponChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
+                placeholder="Código de descuento"
+                className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
+                  focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors duration-150
+                  ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+                disabled={couponApplied}
+              />
+              <button
+                onClick={onCouponApply}
+                disabled={couponApplied || !coupon.trim()}
+                className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {couponApplied ? "✓" : "Aplicar"}
+              </button>
+            </div>
+            {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
+            {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado</p>}
+          </div>
 
-      <div className="border-t border-gray-100" />
+          <div className="border-t border-gray-100" />
+        </>
+      )}
 
       {/* Totals */}
       <div className="space-y-2">
