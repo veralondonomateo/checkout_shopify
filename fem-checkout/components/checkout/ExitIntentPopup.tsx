@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function ExitIntentPopup() {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
+  const triggered = useRef(false); // guards against multiple fires
 
   useEffect(() => {
     if (sessionStorage.getItem("fem-exit-shown")) return;
@@ -17,7 +18,8 @@ export default function ExitIntentPopup() {
     const readyTimer = setTimeout(() => { ready = true; }, isMobile ? 8000 : 5000);
 
     const trigger = () => {
-      if (!ready) return;
+      if (!ready || triggered.current) return;
+      triggered.current = true;
       setShow(true);
       sessionStorage.setItem("fem-exit-shown", "1");
     };

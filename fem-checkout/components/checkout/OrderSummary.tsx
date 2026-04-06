@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { OrderItem } from "@/types/checkout";
 
@@ -9,32 +8,28 @@ interface OrderSummaryProps {
   subtotal: number;
   shipping: number;
   total: number;
+  coupon: string;
+  couponApplied: boolean;
+  couponError: string;
+  discount: number;
+  onCouponChange: (value: string) => void;
+  onCouponApply: () => void;
 }
 
-function formatCOP(value: number) {
+function formatCOP(n: number) {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "COP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(n);
 }
 
-export default function OrderSummary({ items, subtotal, shipping, total }: OrderSummaryProps) {
-  const [coupon, setCoupon] = useState("");
-  const [couponApplied, setCouponApplied] = useState(false);
-  const [couponError, setCouponError] = useState("");
-
-  const handleApplyCoupon = () => {
-    if (!coupon.trim()) return;
-    if (coupon.toUpperCase() === "FEM10") {
-      setCouponApplied(true);
-      setCouponError("");
-    } else {
-      setCouponError("Código no válido");
-    }
-  };
-
+export default function OrderSummary({
+  items, subtotal, shipping, total,
+  coupon, couponApplied, couponError, discount,
+  onCouponChange, onCouponApply,
+}: OrderSummaryProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6 space-y-5">
       {/* Items */}
@@ -43,13 +38,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
           <div key={item.id} className="flex items-start gap-3">
             <div className="relative flex-shrink-0">
               <div className="w-14 h-14 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
-                <Image
-                  src={item.image}
-                  alt={item.name}
-                  width={56}
-                  height={56}
-                  className="w-full h-full object-cover"
-                />
+                <Image src={item.image} alt={item.name} width={56} height={56} className="w-full h-full object-cover" />
               </div>
               <span className="absolute -top-1.5 -right-1.5 bg-[#fc5245] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                 {item.quantity}
@@ -57,9 +46,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 text-sm leading-tight truncate">{item.name}</p>
-              {item.variant && (
-                <p className="text-xs text-gray-500 mt-0.5">{item.variant}</p>
-              )}
+              {item.variant && <p className="text-xs text-gray-500 mt-0.5">{item.variant}</p>}
             </div>
             <p className="font-semibold text-gray-900 text-sm flex-shrink-0">
               {formatCOP(item.price * item.quantity)}
@@ -76,20 +63,16 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
           <input
             type="text"
             value={coupon}
-            onChange={(e) => { setCoupon(e.target.value); setCouponError(""); }}
+            onChange={(e) => onCouponChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
             placeholder="Código de descuento"
-            className={`
-              flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white
-              placeholder-gray-400 text-gray-900
-              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245]
-              transition-colors duration-150
-              ${couponError ? "border-red-300" : "border-gray-300"}
-              ${couponApplied ? "border-green-400 bg-green-50" : ""}
-            `}
+            className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
+              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors duration-150
+              ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
             disabled={couponApplied}
           />
           <button
-            onClick={handleApplyCoupon}
+            onClick={onCouponApply}
             disabled={couponApplied || !coupon.trim()}
             className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -97,7 +80,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
           </button>
         </div>
         {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
-        {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado: -10%</p>}
+        {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado</p>}
       </div>
 
       <div className="border-t border-gray-100" />
@@ -108,21 +91,17 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
           <span>Subtotal</span>
           <span className="font-medium text-gray-900">{formatCOP(subtotal)}</span>
         </div>
-
         <div className="flex justify-between text-sm text-gray-600">
           <span>Envío</span>
           <div className="flex items-center gap-2">
             <span className="line-through text-gray-400">{formatCOP(shipping)}</span>
-            <span className="text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
-              GRATIS
-            </span>
+            <span className="text-xs font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">GRATIS</span>
           </div>
         </div>
-
-        {couponApplied && (
+        {couponApplied && discount > 0 && (
           <div className="flex justify-between text-sm text-green-600">
-            <span>Descuento (10%)</span>
-            <span className="font-medium">-{formatCOP(subtotal * 0.1)}</span>
+            <span>Descuento</span>
+            <span className="font-medium">-{formatCOP(discount)}</span>
           </div>
         )}
       </div>
@@ -134,9 +113,7 @@ export default function OrderSummary({ items, subtotal, shipping, total }: Order
         <span className="font-semibold text-gray-900">Total</span>
         <div className="text-right">
           <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">COP</p>
-          <p className="text-xl font-bold text-gray-900">
-            {formatCOP(couponApplied ? total - subtotal * 0.1 : total)}
-          </p>
+          <p className="text-xl font-bold text-gray-900">{formatCOP(total)}</p>
         </div>
       </div>
 

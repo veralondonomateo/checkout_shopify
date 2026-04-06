@@ -9,7 +9,6 @@ import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import ExitIntentPopup from "./ExitIntentPopup";
 
-// ─── Demo main product ───────────────────────────────────────────────────────
 const MAIN_ITEMS: OrderItem[] = [
   {
     id: "prod_001",
@@ -21,7 +20,6 @@ const MAIN_ITEMS: OrderItem[] = [
   },
 ];
 
-// ─── Upsell products ─────────────────────────────────────────────────────────
 const UPSELL_PRODUCTS: UpsellProduct[] = [
   {
     id: "jabon-intimo-fem",
@@ -47,12 +45,39 @@ const UPSELL_PRODUCTS: UpsellProduct[] = [
 
 const SHIPPING = 15000;
 
+// Valid codes → discount rate
+const COUPON_CODES: Record<string, number> = {
+  FEM10: 0.1,
+  MISTERIOSO: 0.05,
+};
+
 export default function CheckoutPageClient() {
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
-  const handleToggle = (id: string) => {
-    setUpsellQty((prev) => ({ ...prev, [id]: prev[id] ? 0 : 1 }));
+  // ── Coupon state (shared between form and order summary) ──────────────────
+  const [coupon, setCoupon] = useState("");
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState("");
+
+  const handleApplyCoupon = () => {
+    const code = coupon.trim().toUpperCase();
+    if (!code) return;
+    if (COUPON_CODES[code] !== undefined) {
+      setCouponApplied(true);
+      setCouponError("");
+    } else {
+      setCouponError("Código no válido");
+    }
   };
+
+  const handleCouponChange = (value: string) => {
+    setCoupon(value);
+    setCouponError("");
+  };
+
+  // ── Items & totals ────────────────────────────────────────────────────────
+  const handleToggle = (id: string) =>
+    setUpsellQty((prev) => ({ ...prev, [id]: prev[id] ? 0 : 1 }));
 
   const allItems = useMemo<OrderItem[]>(() => {
     const added = UPSELL_PRODUCTS.filter((p) => (upsellQty[p.id] ?? 0) > 0).map((p) => ({
@@ -70,7 +95,12 @@ export default function CheckoutPageClient() {
     () => allItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [allItems]
   );
-  const total = subtotal; // envío gratis
+
+  const discountRate = couponApplied
+    ? (COUPON_CODES[coupon.trim().toUpperCase()] ?? 0)
+    : 0;
+  const discount = Math.round(subtotal * discountRate);
+  const total = subtotal - discount;
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
@@ -87,22 +117,32 @@ export default function CheckoutPageClient() {
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 items-start">
-          {/* Left: Form */}
           <CheckoutForm
             allItems={allItems}
             total={total}
             upsellProducts={UPSELL_PRODUCTS}
             upsellQty={upsellQty}
             onUpsellToggle={handleToggle}
+            coupon={coupon}
+            couponApplied={couponApplied}
+            couponError={couponError}
+            onCouponChange={handleCouponChange}
+            onCouponApply={handleApplyCoupon}
+            discount={discount}
           />
 
-          {/* Right: Summary (desktop) */}
           <aside className="hidden lg:block sticky top-24">
             <OrderSummary
               items={allItems}
               subtotal={subtotal}
               shipping={SHIPPING}
               total={total}
+              coupon={coupon}
+              couponApplied={couponApplied}
+              couponError={couponError}
+              discount={discount}
+              onCouponChange={handleCouponChange}
+              onCouponApply={handleApplyCoupon}
             />
           </aside>
         </div>

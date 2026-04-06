@@ -48,6 +48,12 @@ interface CheckoutFormProps {
   upsellProducts: UpsellProduct[];
   upsellQty: Record<string, number>;
   onUpsellToggle: (id: string) => void;
+  coupon: string;
+  couponApplied: boolean;
+  couponError: string;
+  discount: number;
+  onCouponChange: (value: string) => void;
+  onCouponApply: () => void;
 }
 
 export default function CheckoutForm({
@@ -56,6 +62,12 @@ export default function CheckoutForm({
   upsellProducts,
   upsellQty,
   onUpsellToggle,
+  coupon,
+  couponApplied,
+  couponError,
+  discount,
+  onCouponChange,
+  onCouponApply,
 }: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -120,6 +132,38 @@ export default function CheckoutForm({
       />
 
       <PaymentSection register={register} errors={errors} watch={watch} />
+
+      {/* Coupon — mobile only (desktop shows in OrderSummary sidebar) */}
+      <section className="bg-white rounded-lg border border-gray-200 p-4 lg:hidden">
+        <p className="text-sm font-semibold text-gray-900 mb-3">Código de descuento</p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={coupon}
+            onChange={(e) => onCouponChange(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
+            placeholder="Ej: FEM10"
+            className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
+              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors
+              ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+            disabled={couponApplied}
+          />
+          <button
+            type="button"
+            onClick={onCouponApply}
+            disabled={couponApplied || !coupon.trim()}
+            className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {couponApplied ? "✓" : "Aplicar"}
+          </button>
+        </div>
+        {couponError && <p className="text-xs text-red-500 mt-1.5">{couponError}</p>}
+        {couponApplied && discount > 0 && (
+          <p className="text-xs text-green-600 mt-1.5 font-medium">
+            Descuento aplicado: -{new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(discount)}
+          </p>
+        )}
+      </section>
 
       {/* Billing address */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
