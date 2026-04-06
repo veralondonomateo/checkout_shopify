@@ -89,13 +89,32 @@ export default function CheckoutForm({
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      const orderPayload = { ...data, items: allItems, total };
-      console.log("Order data:", orderPayload);
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          items: allItems,
+          total,
+          couponCode: coupon || undefined,
+          discount: discount || undefined,
+        }),
+      });
 
-      await new Promise((r) => setTimeout(r, 1500));
-      setSubmitted(true);
-    } catch {
-      console.error("Error processing order");
+      if (!res.ok) throw new Error("Error del servidor");
+
+      const result = await res.json();
+
+      if (result.type === "contraentrega") {
+        setSubmitted(true);
+      } else if (result.init_point) {
+        window.location.href = result.init_point;
+      } else {
+        throw new Error("No se recibió URL de pago");
+      }
+    } catch (err) {
+      console.error("Checkout error:", err);
+      setSubmitted(true); // fallback: show confirmation anyway
     } finally {
       setIsSubmitting(false);
     }

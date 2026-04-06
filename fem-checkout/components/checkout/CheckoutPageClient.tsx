@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { OrderItem } from "@/types/checkout";
 import { UpsellProduct } from "./UpsellSection";
 import CheckoutHeader from "./CheckoutHeader";
@@ -52,6 +53,9 @@ const COUPON_CODES: Record<string, number> = {
 };
 
 export default function CheckoutPageClient() {
+  const searchParams = useSearchParams();
+  const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
+
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
   // ── Coupon state (shared between form and order summary) ──────────────────
@@ -105,6 +109,48 @@ export default function CheckoutPageClient() {
   return (
     <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
       <CheckoutHeader />
+
+      {mpStatus === "success" && (
+        <div className="max-w-6xl mx-auto px-4 mt-6">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-5 flex items-center gap-3">
+            <svg className="w-6 h-6 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <div>
+              <p className="font-semibold text-green-800 text-sm">¡Pago aprobado!</p>
+              <p className="text-green-700 text-xs mt-0.5">Tu pedido fue confirmado. Recibirás un mensaje con el seguimiento.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mpStatus === "pending" && (
+        <div className="max-w-6xl mx-auto px-4 mt-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-5 flex items-center gap-3">
+            <svg className="w-6 h-6 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="font-semibold text-yellow-800 text-sm">Pago pendiente</p>
+              <p className="text-yellow-700 text-xs mt-0.5">Tu pago está siendo procesado. Te notificaremos cuando se confirme.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mpStatus === "failure" && (
+        <div className="max-w-6xl mx-auto px-4 mt-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-5 flex items-center gap-3">
+            <svg className="w-6 h-6 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <p className="font-semibold text-red-800 text-sm">Pago rechazado</p>
+              <p className="text-red-700 text-xs mt-0.5">No se pudo procesar tu pago. Intenta de nuevo o elige otro método.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <MobileOrderToggle
         items={allItems}
