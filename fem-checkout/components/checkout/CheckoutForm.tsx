@@ -5,9 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
 import { OrderItem } from "@/types/checkout";
+import { UpsellProduct } from "./UpsellSection";
 import ContactSection from "./ContactSection";
 import DeliverySection from "./DeliverySection";
 import ShippingSection from "./ShippingSection";
+import UpsellSection from "./UpsellSection";
 import PaymentSection from "./PaymentSection";
 import Button from "@/components/ui/Button";
 
@@ -41,11 +43,20 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 interface CheckoutFormProps {
-  items: OrderItem[];
+  allItems: OrderItem[];
   total: number;
+  upsellProducts: UpsellProduct[];
+  upsellQty: Record<string, number>;
+  onUpsellToggle: (id: string) => void;
 }
 
-export default function CheckoutForm({ items, total }: CheckoutFormProps) {
+export default function CheckoutForm({
+  allItems,
+  total,
+  upsellProducts,
+  upsellQty,
+  onUpsellToggle,
+}: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -66,19 +77,11 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
-      // TODO: Connect to your backend / Shopify API
-      console.log("Order data:", data);
+      const orderPayload = { ...data, items: allItems, total };
+      console.log("Order data:", orderPayload);
 
-      if (data.paymentMethod === "contraentrega") {
-        // Create pending order
-        await new Promise((r) => setTimeout(r, 1500)); // simulate API call
-        setSubmitted(true);
-      } else {
-        // Redirect to Mercado Pago
-        await new Promise((r) => setTimeout(r, 1500));
-        // window.location.href = mercadoPagoUrl;
-        setSubmitted(true);
-      }
+      await new Promise((r) => setTimeout(r, 1500));
+      setSubmitted(true);
     } catch {
       console.error("Error processing order");
     } finally {
@@ -89,8 +92,8 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
   if (submitted) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center space-y-4 bg-white rounded-lg border border-gray-200 p-8">
-        <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mb-2">
-          <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mb-2">
+          <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
@@ -108,9 +111,17 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
       <ContactSection register={register} errors={errors} />
       <DeliverySection register={register} errors={errors} watch={watch} setValue={setValue} />
       <ShippingSection />
+
+      {/* Upsells */}
+      <UpsellSection
+        products={upsellProducts}
+        qty={upsellQty}
+        onToggle={onUpsellToggle}
+      />
+
       <PaymentSection register={register} errors={errors} watch={watch} />
 
-      {/* Billing address toggle */}
+      {/* Billing address */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
         <h3 className="font-semibold text-gray-900 mb-3 text-sm">Dirección de facturación</h3>
         <div className="flex items-center gap-3 bg-gray-50 rounded-md border border-gray-200 p-3.5">
@@ -134,7 +145,12 @@ export default function CheckoutForm({ items, total }: CheckoutFormProps) {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
-              Completar pedido · {new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(total)}
+              Completar pedido ·{" "}
+              {new Intl.NumberFormat("es-CO", {
+                style: "currency",
+                currency: "COP",
+                minimumFractionDigits: 0,
+              }).format(total)}
             </span>
           )}
         </Button>
