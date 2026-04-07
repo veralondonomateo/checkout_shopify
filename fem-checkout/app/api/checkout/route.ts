@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       type: "mercadopago",
-      init_point: result.sandbox_init_point ?? result.init_point,
+      init_point: result.init_point ?? result.sandbox_init_point,
       preference_id: result.id,
       order_id: orderId,
     });
