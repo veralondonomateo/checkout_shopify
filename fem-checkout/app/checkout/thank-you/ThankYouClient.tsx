@@ -241,12 +241,12 @@ export default function ThankYouClient() {
             {order?.paymentMethod === "contraentrega" && (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {/* Foto del equipo */}
-                <div className="relative w-full aspect-[4/3] sm:aspect-[16/7]">
+                <div className="relative w-full aspect-[3/2] sm:aspect-[16/7]">
                   <Image
                     src="/equipo.jpg"
                     alt="Equipo FEM empacando tu pedido"
                     fill
-                    className="object-cover object-[center_25%]"
+                    className="object-cover object-[center_30%]"
                     sizes="(max-width: 672px) 100vw, 672px"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
@@ -277,46 +277,52 @@ export default function ThankYouClient() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
-                      <div className="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
-                        <Image
-                          src="https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Probiotico-jabon-5.jpg?v=1769877892"
-                          alt="Jabón Íntimo con Prebióticos"
-                          width={64}
-                          height={64}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-gray-900 leading-tight">
-                          Jabón Íntimo con Prebióticos
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-sm font-bold text-gray-900">{formatCOP(16000)}</span>
-                          <span className="text-xs text-gray-400 line-through">{formatCOP(39000)}</span>
-                          <span className="text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-1.5 py-0.5 rounded">
-                            -59%
-                          </span>
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      {/* Fila: imagen + info */}
+                      <div className="flex items-center gap-3 p-3">
+                        <div className="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
+                          <Image
+                            src="https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Probiotico-jabon-5.jpg?v=1769877892"
+                            alt="Jabón Íntimo con Prebióticos"
+                            width={64}
+                            height={64}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900 leading-tight">
+                            Jabón Íntimo con Prebióticos
+                          </p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-sm font-bold text-gray-900">{formatCOP(16000)}</span>
+                            <span className="text-xs text-gray-400 line-through">{formatCOP(39000)}</span>
+                            <span className="text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-1.5 py-0.5 rounded">
+                              -59%
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleUpsell}
-                        disabled={upsellLoading}
-                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 bg-[#fc5245] text-white text-xs font-semibold rounded-md hover:bg-[#e83d30] transition-colors disabled:opacity-60"
-                      >
-                        {upsellLoading ? (
-                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        )}
-                        <span>Añadir</span>
-                      </button>
+                      {/* Botón ancho completo */}
+                      <div className="px-3 pb-3">
+                        <button
+                          type="button"
+                          onClick={handleUpsell}
+                          disabled={upsellLoading}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#fc5245] text-white text-sm font-semibold rounded-md hover:bg-[#e83d30] transition-colors disabled:opacity-60"
+                        >
+                          {upsellLoading ? (
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                          )}
+                          Añadir a mi pedido
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
