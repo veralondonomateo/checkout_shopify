@@ -13,8 +13,8 @@ import ExitIntentPopup from "./ExitIntentPopup";
 const MAIN_ITEMS: OrderItem[] = [
   {
     id: "prod_001",
-    name: "Proteína FEM Vainilla",
-    variant: "900g · Sabor Vainilla",
+    name: "Probióticos Vaginales",
+    variant: "x60 unidades",
     price: 110000,
     quantity: 1,
     image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
