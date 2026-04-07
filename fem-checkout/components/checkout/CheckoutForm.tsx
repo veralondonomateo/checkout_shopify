@@ -106,8 +106,26 @@ export default function CheckoutForm({
       const result = await res.json();
 
       if (result.type === "contraentrega") {
-        setSubmitted(true);
+        // Save order for thank you page
+        sessionStorage.setItem("fem-order", JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          items: allItems,
+          total,
+          paymentMethod: "contraentrega",
+        }));
+        window.location.href = "/checkout/thank-you?status=success&method=contraentrega";
       } else if (result.init_point) {
+        // Save order for thank you page (MP will redirect back)
+        sessionStorage.setItem("fem-order", JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          items: allItems,
+          total,
+          paymentMethod: "mercadopago",
+        }));
         window.location.href = result.init_point;
       } else {
         throw new Error("No se recibió URL de pago");

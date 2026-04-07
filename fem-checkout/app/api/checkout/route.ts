@@ -53,9 +53,9 @@ export async function POST(req: NextRequest) {
           },
         },
         back_urls: {
-          success: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout?status=success`,
-          failure: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout?status=failure`,
-          pending: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout?status=pending`,
+          success: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout/thank-you?status=success`,
+          failure: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout/thank-you?status=failure`,
+          pending: `${process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app"}/checkout/thank-you?status=pending`,
         },
         auto_return: "approved",
         statement_descriptor: "FEM SUPLEMENTOS",
