@@ -89,15 +89,51 @@ export default function ThankYouClient() {
   const paymentId = searchParams.get("payment_id");
 
   const [order, setOrder] = useState<StoredOrder | null>(null);
+  const [upsellAdded, setUpsellAdded] = useState(false);
+  const [upsellLoading, setUpsellLoading] = useState(false);
 
   useEffect(() => {
+    // Cargar datos de display desde sessionStorage
     const raw = sessionStorage.getItem("fem-order");
     if (raw) {
       try {
         setOrder(JSON.parse(raw));
       } catch {}
     }
+
+    // Confirmar pago de MP en la DB cuando el usuario llega desde el redirect
+    const orderId = searchParams.get("order_id");
+    if (orderId && paymentId && status) {
+      fetch("/api/checkout/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_id: orderId,
+          payment_id: paymentId,
+          status,
+        }),
+      }).catch((err) => console.error("Confirm error:", err));
+    }
   }, []);
+
+  const orderId = searchParams.get("order_id");
+
+  const handleUpsell = async () => {
+    if (!orderId || upsellAdded || upsellLoading) return;
+    setUpsellLoading(true);
+    try {
+      const res = await fetch("/api/checkout/upsell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: orderId }),
+      });
+      if (res.ok) setUpsellAdded(true);
+    } catch (err) {
+      console.error("Upsell error:", err);
+    } finally {
+      setUpsellLoading(false);
+    }
+  };
 
   const isFailure = status === "failure";
   const isPending = status === "pending";
@@ -200,6 +236,92 @@ export default function ThankYouClient() {
                 </p>
               )}
             </div>
+
+            {/* ── POST-PURCHASE UPSELL (solo contraentrega) ── */}
+            {order?.paymentMethod === "contraentrega" && (
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                {/* Foto del equipo */}
+                <div className="relative w-full aspect-[4/3] sm:aspect-[16/7]">
+                  <Image
+                    src="/equipo.jpg"
+                    alt="Equipo FEM empacando tu pedido"
+                    fill
+                    className="object-cover object-[center_25%]"
+                    sizes="(max-width: 672px) 100vw, 672px"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+                  <p className="absolute bottom-3 left-4 text-white text-xs font-medium">
+                    Tu pedido se está empacando ahora mismo
+                  </p>
+                </div>
+
+                {/* Mensaje */}
+                <div className="p-5 sm:p-6">
+                  <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                    <span className="font-semibold text-gray-900">¡Ya vamos a empacar tu pedido!</span>{" "}
+                    Justo vimos que en la bolsita hay un espacito para un jabón íntimo con prebióticos —
+                    para que aceleres tus resultados y te cuides desde afuera también.
+                  </p>
+
+                  {/* Producto */}
+                  {upsellAdded ? (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">¡Listo! El jabón va en tu pedido.</p>
+                        <p className="text-xs text-green-600 mt-0.5">Lo recibirás junto con tu compra.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200">
+                      <div className="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
+                        <Image
+                          src="https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Probiotico-jabon-5.jpg?v=1769877892"
+                          alt="Jabón Íntimo con Prebióticos"
+                          width={64}
+                          height={64}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-gray-900 leading-tight">
+                          Jabón Íntimo con Prebióticos
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-sm font-bold text-gray-900">{formatCOP(16000)}</span>
+                          <span className="text-xs text-gray-400 line-through">{formatCOP(39000)}</span>
+                          <span className="text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-1.5 py-0.5 rounded">
+                            -59%
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleUpsell}
+                        disabled={upsellLoading}
+                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 bg-[#fc5245] text-white text-xs font-semibold rounded-md hover:bg-[#e83d30] transition-colors disabled:opacity-60"
+                      >
+                        {upsellLoading ? (
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        )}
+                        <span>Añadir</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Order items */}
             {order && order.items.length > 0 && (

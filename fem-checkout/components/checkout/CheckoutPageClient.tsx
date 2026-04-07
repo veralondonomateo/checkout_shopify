@@ -165,6 +165,8 @@ export default function CheckoutPageClient() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 items-start">
           <CheckoutForm
             allItems={allItems}
+            subtotal={subtotal}
+            shipping={0}
             total={total}
             upsellProducts={UPSELL_PRODUCTS}
             upsellQty={upsellQty}

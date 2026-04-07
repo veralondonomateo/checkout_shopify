@@ -44,6 +44,8 @@ type FormData = z.infer<typeof schema>;
 
 interface CheckoutFormProps {
   allItems: OrderItem[];
+  subtotal: number;
+  shipping: number;
   total: number;
   upsellProducts: UpsellProduct[];
   upsellQty: Record<string, number>;
@@ -58,6 +60,8 @@ interface CheckoutFormProps {
 
 export default function CheckoutForm({
   allItems,
+  subtotal,
+  shipping,
   total,
   upsellProducts,
   upsellQty,
@@ -95,6 +99,8 @@ export default function CheckoutForm({
         body: JSON.stringify({
           ...data,
           items: allItems,
+          subtotal,
+          shipping,
           total,
           couponCode: coupon || undefined,
           discount: discount || undefined,
@@ -105,27 +111,21 @@ export default function CheckoutForm({
 
       const result = await res.json();
 
+      // Guardar datos de la orden para la página de gracias (display)
+      const orderPayload = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        items: allItems,
+        total,
+        paymentMethod: data.paymentMethod,
+      };
+      sessionStorage.setItem("fem-order", JSON.stringify(orderPayload));
+
       if (result.type === "contraentrega") {
-        // Save order for thank you page
-        sessionStorage.setItem("fem-order", JSON.stringify({
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          items: allItems,
-          total,
-          paymentMethod: "contraentrega",
-        }));
-        window.location.href = "/checkout/thank-you?status=success&method=contraentrega";
+        window.location.href = `/checkout/thank-you?status=success&method=contraentrega&order_id=${result.order_id}`;
       } else if (result.init_point) {
-        // Save order for thank you page (MP will redirect back)
-        sessionStorage.setItem("fem-order", JSON.stringify({
-          firstName: data.firstName,
-          lastName: data.lastName,
-          email: data.email,
-          items: allItems,
-          total,
-          paymentMethod: "mercadopago",
-        }));
+        // El order_id ya viene embebido en la back_url que MP devuelve
         window.location.href = result.init_point;
       } else {
         throw new Error("No se recibió URL de pago");
