@@ -14,6 +14,8 @@ interface OrderSummaryProps {
   discount?: number;
   onCouponChange?: (value: string) => void;
   onCouponApply?: () => void;
+  mainQty?: number;
+  onMainQtyChange?: (qty: number) => void;
 }
 
 function formatCOP(n: number) {
@@ -29,24 +31,47 @@ export default function OrderSummary({
   items, subtotal, shipping, total,
   coupon = "", couponApplied = false, couponError = "", discount = 0,
   onCouponChange, onCouponApply,
+  mainQty, onMainQtyChange,
 }: OrderSummaryProps) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6 space-y-5">
       {/* Items */}
       <div className="space-y-4">
-        {items.map((item) => (
+        {items.map((item, idx) => (
           <div key={item.id} className="flex items-start gap-3">
             <div className="relative flex-shrink-0">
               <div className="w-14 h-14 rounded-md overflow-hidden bg-gray-100 border border-gray-200">
                 <Image src={item.image} alt={item.name} width={56} height={56} className="w-full h-full object-cover" />
               </div>
-              <span className="absolute -top-1.5 -right-1.5 bg-[#fc5245] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {item.quantity}
-              </span>
+              {/* Only show qty badge on non-main items or when there's no qty control */}
+              {!(idx === 0 && onMainQtyChange) && (
+                <span className="absolute -top-1.5 -right-1.5 bg-[#fc5245] text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                  {item.quantity}
+                </span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 text-sm leading-tight truncate">{item.name}</p>
               {item.variant && <p className="text-xs text-gray-500 mt-0.5">{item.variant}</p>}
+              {idx === 0 && onMainQtyChange && mainQty !== undefined && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onMainQtyChange(Math.max(1, mainQty - 1))}
+                    className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors text-base font-medium leading-none"
+                  >
+                    −
+                  </button>
+                  <span className="text-sm font-semibold text-gray-900 w-4 text-center">{mainQty}</span>
+                  <button
+                    type="button"
+                    onClick={() => onMainQtyChange(mainQty + 1)}
+                    className="w-6 h-6 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-colors text-base font-medium leading-none"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
             </div>
             <p className="font-semibold text-gray-900 text-sm flex-shrink-0">
               {formatCOP(item.price * item.quantity)}

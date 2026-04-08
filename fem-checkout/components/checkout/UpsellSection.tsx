@@ -11,6 +11,8 @@ export interface UpsellProduct {
   benefit: string;
   stock: number;
   soldToday: number;
+  /** Shopify handle — used to exclude this upsell when the main product is the same */
+  shopifyHandle?: string;
 }
 
 interface UpsellSectionProps {

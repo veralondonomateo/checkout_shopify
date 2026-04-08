@@ -9,6 +9,8 @@ interface Props {
   subtotal: number;
   shipping: number;
   total: number;
+  mainQty?: number;
+  onMainQtyChange?: (qty: number) => void;
 }
 
 function formatCOP(value: number) {
@@ -20,7 +22,7 @@ function formatCOP(value: number) {
   }).format(value);
 }
 
-export default function MobileOrderToggle({ items, subtotal, shipping, total }: Props) {
+export default function MobileOrderToggle({ items, subtotal, shipping, total, mainQty, onMainQtyChange }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -49,7 +51,7 @@ export default function MobileOrderToggle({ items, subtotal, shipping, total }: 
 
       {open && (
         <div className="px-4 py-4 bg-white border-b border-gray-200">
-          <OrderSummary items={items} subtotal={subtotal} shipping={shipping} total={total} />
+          <OrderSummary items={items} subtotal={subtotal} shipping={shipping} total={total} mainQty={mainQty} onMainQtyChange={onMainQtyChange} />
         </div>
       )}
     </div>

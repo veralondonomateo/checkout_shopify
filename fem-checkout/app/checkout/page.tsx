@@ -14,18 +14,19 @@ export default async function CheckoutPage({
 }) {
   const { product } = await searchParams;
 
-  let shopifyProduct: ShopifyProduct | null = null;
-  if (product) {
-    try {
-      shopifyProduct = await getProductByHandle(product);
-    } catch (err) {
-      console.error("[Checkout] Error fetching Shopify product:", err);
-    }
-  }
+  const [shopifyProduct, gomitasProduct] = await Promise.all([
+    product
+      ? getProductByHandle(product).catch((err) => {
+          console.error("[Checkout] Error fetching main product:", err);
+          return null;
+        })
+      : Promise.resolve(null),
+    getProductByHandle("gomitas-sindrome-premestrual-x60").catch(() => null),
+  ]);
 
   return (
     <Suspense>
-      <CheckoutPageClient shopifyProduct={shopifyProduct} />
+      <CheckoutPageClient shopifyProduct={shopifyProduct} gomitasProduct={gomitasProduct} />
     </Suspense>
   );
 }

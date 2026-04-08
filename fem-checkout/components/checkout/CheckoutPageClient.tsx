@@ -32,7 +32,8 @@ function shopifyProductToItem(p: ShopifyProduct): OrderItem {
   };
 }
 
-const UPSELL_PRODUCTS: UpsellProduct[] = [
+// Base upsell catalog — Gomitas is filled in dynamically from Shopify
+const BASE_UPSELLS: UpsellProduct[] = [
   {
     id: "jabon-intimo-fem",
     name: "Jabón íntimo FEM",
@@ -42,16 +43,29 @@ const UPSELL_PRODUCTS: UpsellProduct[] = [
     benefit: "Higiene íntima con pH balanceado",
     stock: 7,
     soldToday: 14,
+    shopifyHandle: "jabon-intimo-fem",
   },
   {
     id: "ovulos-fem",
     name: "Óvulos FEM",
-    variant: "10 unidades · Probióticos",
+    variant: "6 unidades · Probióticos",
     price: 45000,
     image: "https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Ovulos.jpg?v=1755895009",
     benefit: "Restaura la flora vaginal naturalmente",
     stock: 5,
     soldToday: 9,
+    shopifyHandle: "ovulos-fem",
+  },
+  {
+    id: "gomitas-pms",
+    name: "Gomitas PMS FEM",
+    variant: "x60 gomitas · Síndrome premenstrual",
+    price: 0, // filled from Shopify
+    image: "",  // filled from Shopify
+    benefit: "Elimina tus síntomas menstruales",
+    stock: 8,
+    soldToday: 11,
+    shopifyHandle: "gomitas-sindrome-premestrual-x60",
   },
 ];
 
@@ -65,15 +79,17 @@ const COUPON_CODES: Record<string, number> = {
 
 interface CheckoutPageClientProps {
   shopifyProduct?: ShopifyProduct | null;
+  gomitasProduct?: ShopifyProduct | null;
 }
 
-export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
   const MAIN_ITEMS: OrderItem[] = shopifyProduct
     ? [shopifyProductToItem(shopifyProduct)]
     : [DEFAULT_ITEM];
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
+  const [mainQty, setMainQty] = useState(1);
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
   // ── Coupon state (shared between form and order summary) ──────────────────
@@ -97,11 +113,35 @@ export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClien
     setCouponError("");
   };
 
+  // ── Upsell catalog: fill Gomitas from Shopify + filter main product ──────
+  const UPSELL_PRODUCTS = useMemo<UpsellProduct[]>(() => {
+    const filled = BASE_UPSELLS.map((p) => {
+      if (p.id === "gomitas-pms" && gomitasProduct) {
+        const variant = gomitasProduct.variants[0];
+        return {
+          ...p,
+          price: Math.round(parseFloat(variant?.price ?? "0")),
+          image: gomitasProduct.images[0]?.src ?? p.image,
+        };
+      }
+      return p;
+    });
+    // Remove products with no price/image (Shopify data missing) and exclude main product
+    return filled.filter((p) => {
+      if (p.shopifyHandle === shopifyProduct?.handle) return false;
+      if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
+      return true;
+    });
+  }, [gomitasProduct, shopifyProduct]);
+
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>
     setUpsellQty((prev) => ({ ...prev, [id]: prev[id] ? 0 : 1 }));
 
   const allItems = useMemo<OrderItem[]>(() => {
+    const mainWithQty = MAIN_ITEMS.map((item, i) =>
+      i === 0 ? { ...item, quantity: mainQty } : item
+    );
     const added = UPSELL_PRODUCTS.filter((p) => (upsellQty[p.id] ?? 0) > 0).map((p) => ({
       id: p.id,
       name: p.name,
@@ -110,8 +150,8 @@ export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClien
       quantity: upsellQty[p.id],
       image: p.image,
     }));
-    return [...MAIN_ITEMS, ...added];
-  }, [upsellQty]);
+    return [...mainWithQty, ...added];
+  }, [upsellQty, mainQty, UPSELL_PRODUCTS]);
 
   const subtotal = useMemo(
     () => allItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
@@ -175,6 +215,8 @@ export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClien
         subtotal={subtotal}
         shipping={SHIPPING}
         total={total}
+        mainQty={mainQty}
+        onMainQtyChange={setMainQty}
       />
 
       <ExitIntentPopup couponApplied={couponApplied} />
@@ -209,6 +251,8 @@ export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClien
               discount={discount}
               onCouponChange={handleCouponChange}
               onCouponApply={handleApplyCoupon}
+              mainQty={mainQty}
+              onMainQtyChange={setMainQty}
             />
           </aside>
         </div>
