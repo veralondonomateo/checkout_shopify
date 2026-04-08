@@ -1,7 +1,13 @@
-// ── Token cache (module-level, persists on warm serverless instances) ─────────
+// ── Auth: prefer static SHOPIFY_ACCESS_TOKEN, fall back to OAuth client_credentials ──
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
 async function getAccessToken(): Promise<string> {
+  // Static token (custom app) — simplest and most reliable
+  if (process.env.SHOPIFY_ACCESS_TOKEN) {
+    return process.env.SHOPIFY_ACCESS_TOKEN;
+  }
+
+  // OAuth client_credentials flow (fallback)
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt > now + 60_000) {
     return tokenCache.token;
@@ -114,10 +120,8 @@ export async function createShopifyOrder(
   const orderBody: Record<string, unknown> = {
     email: input.email,
     financial_status: isPaid ? "paid" : "pending",
-    fulfillment_status: null,
-    send_receipt: false,
-    send_fulfillment_receipt: false,
     currency: "COP",
+    suppress_notifications: true,
     line_items: input.items.map((item) => ({
       title: item.variant ? `${item.name} – ${item.variant}` : item.name,
       price: item.price.toFixed(2),

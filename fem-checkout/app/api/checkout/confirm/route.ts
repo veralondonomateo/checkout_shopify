@@ -113,7 +113,9 @@ export async function POST(req: NextRequest) {
           .update({ shopify_order_id: shopifyId })
           .eq("id", order_id);
       } catch (err) {
-        console.error("[Confirm] Error creando orden Shopify:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Confirm] Error creando orden Shopify:", msg);
+        await supabase.from("orders").update({ shopify_error: msg }).eq("id", order_id);
       }
     }
   }
