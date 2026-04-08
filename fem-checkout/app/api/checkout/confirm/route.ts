@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { createShopifyOrder } from "@/lib/shopify";
 
 type DBPaymentStatus = "pending" | "approved" | "failure" | "in_process";
 
@@ -74,6 +75,47 @@ export async function POST(req: NextRequest) {
   if (error) {
     console.error("[Confirm] Error actualizando orden:", error);
     return NextResponse.json({ error: "DB error" }, { status: 500 });
+  }
+
+  // Crear orden en Shopify si el pago fue aprobado
+  if (status === "approved") {
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", order_id)
+      .single();
+
+    if (order && !order.shopify_order_id) {
+      const { data: items } = await supabase
+        .from("order_items")
+        .select("name, variant, price, quantity")
+        .eq("order_id", order_id);
+
+      try {
+        const shopifyId = await createShopifyOrder({
+          email: order.email,
+          firstName: order.first_name,
+          lastName: order.last_name,
+          phone: order.phone,
+          address: order.address,
+          complement: order.complement,
+          city: order.city,
+          state: order.state,
+          items: items ?? [],
+          shipping: order.shipping ?? 0,
+          total: order.total,
+          paymentMethod: "mercadopago",
+          mpPaymentId: payment_id,
+          femOrderId: order_id,
+        });
+        await supabase
+          .from("orders")
+          .update({ shopify_order_id: shopifyId })
+          .eq("id", order_id);
+      } catch (err) {
+        console.error("[Confirm] Error creando orden Shopify:", err);
+      }
+    }
   }
 
   return NextResponse.json({ ok: true, verified: true, status });

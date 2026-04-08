@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 import { createServerClient } from "@/lib/supabase";
+import { createShopifyOrder } from "@/lib/shopify";
 
 type DBPaymentStatus = "pending" | "approved" | "failure" | "in_process";
 
@@ -113,6 +114,47 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("[MP Webhook] Error actualizando orden:", error);
       return NextResponse.json({ error: "DB error" }, { status: 500 });
+    }
+
+    // Crear orden en Shopify cuando el pago es aprobado
+    if (status === "approved") {
+      const { data: order } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", orderId)
+        .single();
+
+      if (order && !order.shopify_order_id) {
+        const { data: items } = await supabase
+          .from("order_items")
+          .select("name, variant, price, quantity")
+          .eq("order_id", orderId);
+
+        try {
+          const shopifyId = await createShopifyOrder({
+            email: order.email,
+            firstName: order.first_name,
+            lastName: order.last_name,
+            phone: order.phone,
+            address: order.address,
+            complement: order.complement,
+            city: order.city,
+            state: order.state,
+            items: items ?? [],
+            shipping: order.shipping ?? 0,
+            total: order.total,
+            paymentMethod: "mercadopago",
+            mpPaymentId: paymentId,
+            femOrderId: orderId,
+          });
+          await supabase
+            .from("orders")
+            .update({ shopify_order_id: shopifyId })
+            .eq("id", orderId);
+        } catch (err) {
+          console.error("[MP Webhook] Error creando orden Shopify:", err);
+        }
+      }
     }
 
     console.log(`[MP Webhook] Orden ${orderId} → ${status} (pago ${paymentId})`);

@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { OrderItem } from "@/types/checkout";
+import { ShopifyProduct } from "@/lib/shopify";
 import { UpsellProduct } from "./UpsellSection";
 import CheckoutHeader from "./CheckoutHeader";
 import CheckoutForm from "./CheckoutForm";
@@ -10,16 +11,26 @@ import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import ExitIntentPopup from "./ExitIntentPopup";
 
-const MAIN_ITEMS: OrderItem[] = [
-  {
-    id: "prod_001",
-    name: "Probióticos Vaginales",
-    variant: "x60 unidades",
-    price: 110000,
+const DEFAULT_ITEM: OrderItem = {
+  id: "prod_001",
+  name: "Probióticos Vaginales",
+  variant: "x60 unidades",
+  price: 110000,
+  quantity: 1,
+  image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
+};
+
+function shopifyProductToItem(p: ShopifyProduct): OrderItem {
+  const variant = p.variants[0];
+  return {
+    id: String(p.id),
+    name: p.title,
+    variant: variant?.title !== "Default Title" ? variant?.title : undefined,
+    price: Math.round(parseFloat(variant?.price ?? "0")),
     quantity: 1,
-    image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
-  },
-];
+    image: p.images[0]?.src ?? "",
+  };
+}
 
 const UPSELL_PRODUCTS: UpsellProduct[] = [
   {
@@ -52,8 +63,15 @@ const COUPON_CODES: Record<string, number> = {
   MISTERIOSO: 0.05,
 };
 
-export default function CheckoutPageClient() {
+interface CheckoutPageClientProps {
+  shopifyProduct?: ShopifyProduct | null;
+}
+
+export default function CheckoutPageClient({ shopifyProduct }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
+  const MAIN_ITEMS: OrderItem[] = shopifyProduct
+    ? [shopifyProductToItem(shopifyProduct)]
+    : [DEFAULT_ITEM];
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});

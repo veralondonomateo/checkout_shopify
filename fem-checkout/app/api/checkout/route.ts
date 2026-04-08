@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
+import { createShopifyOrder } from "@/lib/shopify";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
@@ -92,8 +93,37 @@ export async function POST(req: NextRequest) {
     console.error("Supabase items insert error:", itemsError);
   }
 
-  // ── 3. Contraentrega: orden lista, sin pago online ───────────────────────
+  // ── 3. Contraentrega: crear orden en Shopify y responder ────────────────
   if (body.paymentMethod === "contraentrega") {
+    try {
+      const shopifyId = await createShopifyOrder({
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        phone: body.phone,
+        address: body.address,
+        complement: body.complement,
+        city: body.city,
+        state: body.state,
+        items: body.items.map((i) => ({
+          name: i.name,
+          variant: i.variant,
+          price: i.price,
+          quantity: i.quantity,
+        })),
+        shipping: body.shipping,
+        total: body.total,
+        paymentMethod: "contraentrega",
+        femOrderId: orderId,
+      });
+      await supabase
+        .from("orders")
+        .update({ shopify_order_id: shopifyId })
+        .eq("id", orderId);
+    } catch (err) {
+      console.error("[Checkout] Error creando orden Shopify:", err);
+    }
+
     return NextResponse.json({
       type: "contraentrega",
       status: "approved",
