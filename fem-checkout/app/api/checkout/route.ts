@@ -27,7 +27,7 @@ interface CheckoutBody {
 }
 
 const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutshopify.vercel.app";
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutfem.com";
 
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
