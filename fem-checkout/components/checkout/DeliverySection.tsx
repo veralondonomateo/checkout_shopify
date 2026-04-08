@@ -74,9 +74,9 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
         {/* Cedula + Phone */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
-            label="Cédula"
+            label="Cédula o NIT"
             type="text"
-            placeholder="1234567890"
+            placeholder="Para factura electrónica"
             optional
             inputMode="numeric"
             error={errors.cedula?.message}
@@ -85,7 +85,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
           <Input
             label="Número de WhatsApp"
             type="tel"
-            placeholder="300 123 4567"
+            placeholder="3001234567"
             autoComplete="tel"
             inputMode="tel"
             icon={

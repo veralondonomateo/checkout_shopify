@@ -32,8 +32,7 @@ const schema = z.object({
   city: z.string().min(1, "Selecciona una ciudad"),
   phone: z
     .string()
-    .min(7, "Ingresa un teléfono válido")
-    .regex(/^[\d\s\-\+\(\)]{7,15}$/, "Teléfono no válido"),
+    .regex(/^\d{10}$/, "Número inválido"),
   paymentMethod: z
     .enum(["mercadopago", "contraentrega"] as const)
     .refine((v) => v !== undefined, { message: "Selecciona un método de pago" }),
