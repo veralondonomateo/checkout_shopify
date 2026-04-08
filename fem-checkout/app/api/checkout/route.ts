@@ -124,7 +124,6 @@ export async function POST(req: NextRequest) {
           phone: { number: body.phone },
           address: {
             street_name: body.address,
-            zip_code: "",
           },
           ...(body.cedula
             ? { identification: { type: "CC", number: body.cedula } }
