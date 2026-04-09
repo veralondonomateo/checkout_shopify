@@ -31,13 +31,52 @@ const APP_URL =
     ? window.location.origin
     : "https://checkoutfem.com";
 
+// Detect "1 unidad" and "2 unidades" variants (compra única)
+function getQuantityLinks(product: ShopifyProduct) {
+  const v1 = product.variants.find((v) => /\b1\s*unidad\b/i.test(v.title));
+  const v2 = product.variants.find((v) => /\b2\s*unidades?\b/i.test(v.title));
+
+  const basePrice = parseFloat(product.variants[0]?.price ?? "0");
+  const base = product.variants[0];
+
+  const link1 = v1
+    ? {
+        url: `${APP_URL}/checkout?product=${product.handle}&variant=${v1.id}`,
+        price: parseFloat(v1.price),
+        variantId: v1.id,
+        label: "1 und",
+      }
+    : {
+        url: `${APP_URL}/checkout?product=${product.handle}`,
+        price: basePrice,
+        variantId: base?.id,
+        label: "1 und",
+      };
+
+  const link2 = v2
+    ? {
+        url: `${APP_URL}/checkout?product=${product.handle}&variant=${v2.id}`,
+        price: parseFloat(v2.price),
+        variantId: v2.id,
+        label: "2 und",
+      }
+    : {
+        url: `${APP_URL}/checkout?product=${product.handle}&qty=2`,
+        price: basePrice * 2,
+        variantId: null,
+        label: "2 und",
+      };
+
+  return { link1, link2 };
+}
+
 export default function AdminClient() {
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [products, setProducts] = useState<ShopifyProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState<number | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,10 +104,9 @@ export default function AdminClient() {
     }
   };
 
-  const copyLink = (handle: string, id: number) => {
-    const url = `${APP_URL}/checkout?product=${handle}`;
+  const copyLink = (url: string, key: string) => {
     navigator.clipboard.writeText(url);
-    setCopied(id);
+    setCopied(key);
     setTimeout(() => setCopied(null), 2000);
   };
 
@@ -133,7 +171,8 @@ export default function AdminClient() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <h1 className="text-lg font-bold text-gray-900 mb-6">Productos y links de checkout</h1>
+        <h1 className="text-lg font-bold text-gray-900 mb-1">Links de checkout</h1>
+        <p className="text-xs text-gray-400 mb-6">Cada producto tiene link para 1 und y 2 und. Precios desde Shopify.</p>
 
         {products.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -142,9 +181,7 @@ export default function AdminClient() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {products.map((product) => {
-              const price = parseFloat(product.variants[0]?.price ?? "0");
-              const checkoutUrl = `${APP_URL}/checkout?product=${product.handle}`;
-              const isCopied = copied === product.id;
+              const { link1, link2 } = getQuantityLinks(product);
 
               return (
                 <div
@@ -172,58 +209,29 @@ export default function AdminClient() {
 
                   {/* Info */}
                   <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-1 line-clamp-2">
+                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-3 line-clamp-2">
                       {product.title}
                     </h3>
-                    <p className="text-sm font-bold text-[#fc5245] mb-1">
-                      {formatCOP(price)}
-                    </p>
-                    <p className="text-[11px] text-gray-400 mb-3 truncate">
-                      {product.handle}
-                    </p>
 
-                    {/* URL */}
-                    <div className="bg-gray-50 rounded-md border border-gray-200 px-2.5 py-1.5 mb-3">
-                      <p className="text-[10px] text-gray-500 truncate font-mono">
-                        /checkout?product={product.handle}
-                      </p>
-                    </div>
+                    {/* 1 unidad */}
+                    <LinkRow
+                      label="1 und"
+                      price={link1.price}
+                      url={link1.url}
+                      copiedKey={`${product.id}-1`}
+                      activeCopied={copied}
+                      onCopy={copyLink}
+                    />
 
-                    {/* Botones */}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => copyLink(product.handle, product.id)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-semibold transition-colors ${
-                          isCopied
-                            ? "bg-green-500 text-white"
-                            : "bg-[#fc5245] text-white hover:bg-[#e83d30]"
-                        }`}
-                      >
-                        {isCopied ? (
-                          <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            ¡Copiado!
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            Copiar link
-                          </>
-                        )}
-                      </button>
-                      <a
-                        href={checkoutUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-2 rounded-md border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        Ver
-                      </a>
-                    </div>
+                    {/* 2 unidades */}
+                    <LinkRow
+                      label="2 und"
+                      price={link2.price}
+                      url={link2.url}
+                      copiedKey={`${product.id}-2`}
+                      activeCopied={copied}
+                      onCopy={copyLink}
+                    />
                   </div>
                 </div>
               );
@@ -231,6 +239,71 @@ export default function AdminClient() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function LinkRow({
+  label,
+  price,
+  url,
+  copiedKey,
+  activeCopied,
+  onCopy,
+}: {
+  label: string;
+  price: number;
+  url: string;
+  copiedKey: string;
+  activeCopied: string | null;
+  onCopy: (url: string, key: string) => void;
+}) {
+  const isCopied = activeCopied === copiedKey;
+  return (
+    <div className="flex items-center gap-2 mb-2">
+      <div className="flex-1 min-w-0 bg-gray-50 rounded-md border border-gray-200 px-2.5 py-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex-shrink-0">
+            {label}
+          </span>
+          <span className="text-xs font-bold text-[#fc5245] flex-shrink-0">
+            {formatCOP(price)}
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-400 truncate font-mono mt-0.5">
+          {url.replace(/^https?:\/\/[^/]+/, "")}
+        </p>
+      </div>
+      <button
+        onClick={() => onCopy(url, copiedKey)}
+        title="Copiar link"
+        className={`flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+          isCopied
+            ? "bg-green-500 text-white"
+            : "bg-[#fc5245] text-white hover:bg-[#e83d30]"
+        }`}
+      >
+        {isCopied ? (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        )}
+      </button>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Ver checkout"
+        className="flex-shrink-0 w-8 h-8 rounded-md border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+      </a>
     </div>
   );
 }

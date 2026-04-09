@@ -20,8 +20,10 @@ const DEFAULT_ITEM: OrderItem = {
   image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
 };
 
-function shopifyProductToItem(p: ShopifyProduct): OrderItem {
-  const variant = p.variants[0];
+function shopifyProductToItem(p: ShopifyProduct, variantId?: number): OrderItem {
+  const variant = variantId
+    ? (p.variants.find((v) => v.id === variantId) ?? p.variants[0])
+    : p.variants[0];
   return {
     id: String(p.id),
     name: p.title,
@@ -83,16 +85,18 @@ interface CheckoutPageClientProps {
   gomitasProduct?: ShopifyProduct | null;
   jabonProduct?: ShopifyProduct | null;
   ovulosProduct?: ShopifyProduct | null;
+  initialVariantId?: number;
+  initialQty?: number;
 }
 
-export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
   const MAIN_ITEMS: OrderItem[] = shopifyProduct
-    ? [shopifyProductToItem(shopifyProduct)]
+    ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
     : [DEFAULT_ITEM];
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
-  const [mainQty, setMainQty] = useState(1);
+  const [mainQty, setMainQty] = useState(initialQty ?? 1);
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
   // ── Coupon state (shared between form and order summary) ──────────────────

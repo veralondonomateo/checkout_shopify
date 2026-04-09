@@ -10,9 +10,11 @@ export const metadata = {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string }>;
+  searchParams: Promise<{ product?: string; variant?: string; qty?: string }>;
 }) {
-  const { product } = await searchParams;
+  const { product, variant, qty } = await searchParams;
+  const initialVariantId = variant ? parseInt(variant, 10) || undefined : undefined;
+  const initialQty = qty ? Math.max(1, parseInt(qty, 10) || 1) : undefined;
 
   const [shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct] = await Promise.all([
     product
@@ -33,6 +35,8 @@ export default async function CheckoutPage({
         gomitasProduct={gomitasProduct}
         jabonProduct={jabonProduct}
         ovulosProduct={ovulosProduct}
+        initialVariantId={initialVariantId}
+        initialQty={initialQty}
       />
     </Suspense>
   );
