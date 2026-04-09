@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { getProductByHandle } from "@/lib/shopify";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
@@ -38,6 +39,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, already: true });
   }
 
+  // Obtener variant_id de Shopify para enlazar el producto correctamente
+  let shopifyVariantId: number | null = null;
+  try {
+    const jabonShopify = await getProductByHandle("jabon-intimo-fem");
+    shopifyVariantId = jabonShopify?.variants[0]?.id ?? null;
+  } catch {}
+
   // Insertar item
   const { error: insertError } = await supabase.from("order_items").insert({
     order_id,
@@ -47,6 +55,7 @@ export async function POST(req: NextRequest) {
     price: JABON.price,
     quantity: JABON.quantity,
     image: JABON.image,
+    shopify_variant_id: shopifyVariantId,
   });
 
   if (insertError) {

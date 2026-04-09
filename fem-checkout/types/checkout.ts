@@ -30,6 +30,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   image: string;
+  /** Shopify variant ID — used for proper inventory/product linking in orders */
+  shopifyVariantId?: number;
 }
 
 export interface OrderSummaryProps {

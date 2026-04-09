@@ -13,6 +13,8 @@ export interface UpsellProduct {
   soldToday: number;
   /** Shopify handle — used to exclude this upsell when the main product is the same */
   shopifyHandle?: string;
+  /** Shopify variant ID — for proper inventory/product linking in orders */
+  shopifyVariantId?: number;
 }
 
 interface UpsellSectionProps {

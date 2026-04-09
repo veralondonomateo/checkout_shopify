@@ -104,6 +104,7 @@ export interface ShopifyOrderInput {
     variant?: string | null;
     price: number;
     quantity: number;
+    shopifyVariantId?: number | null;
   }>;
   shipping: number;
   total: number;
@@ -122,12 +123,19 @@ export async function createShopifyOrder(
     financial_status: isPaid ? "paid" : "pending",
     currency: "COP",
     suppress_notifications: true,
-    line_items: input.items.map((item) => ({
-      title: item.variant ? `${item.name} – ${item.variant}` : item.name,
-      price: item.price.toFixed(2),
-      quantity: item.quantity,
-      requires_shipping: true,
-    })),
+    line_items: input.items.map((item) => {
+      const base: Record<string, unknown> = {
+        price: item.price.toFixed(2),
+        quantity: item.quantity,
+        requires_shipping: true,
+      };
+      if (item.shopifyVariantId) {
+        base.variant_id = item.shopifyVariantId;
+      } else {
+        base.title = item.variant ? `${item.name} – ${item.variant}` : item.name;
+      }
+      return base;
+    }),
     customer: {
       first_name: input.firstName,
       last_name: input.lastName,

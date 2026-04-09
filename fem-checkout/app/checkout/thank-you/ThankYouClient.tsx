@@ -92,6 +92,12 @@ export default function ThankYouClient() {
   const [upsellAdded, setUpsellAdded] = useState(false);
   const [upsellLoading, setUpsellLoading] = useState(false);
 
+  const orderId = searchParams.get("order_id");
+  const isFailure = status === "failure";
+  const isPending = status === "pending";
+  // Contraentrega: no payment_id in URL; MP: has payment_id
+  const isContraentrega = !paymentId && !isFailure && !isPending;
+
   useEffect(() => {
     // Cargar datos de display desde sessionStorage
     const raw = sessionStorage.getItem("fem-order");
@@ -102,7 +108,6 @@ export default function ThankYouClient() {
     }
 
     // Confirmar pago de MP en la DB cuando el usuario llega desde el redirect
-    const orderId = searchParams.get("order_id");
     if (orderId && paymentId && status) {
       fetch("/api/checkout/confirm", {
         method: "POST",
@@ -116,7 +121,35 @@ export default function ThankYouClient() {
     }
   }, []);
 
-  const orderId = searchParams.get("order_id");
+  // ── Finalize: crear orden Shopify para contraentrega tras ventana de upsell
+  useEffect(() => {
+    if (!orderId || !isContraentrega) return;
+
+    const callFinalize = () => {
+      const payload = JSON.stringify({ order_id: orderId });
+      // sendBeacon garantiza envío incluso si el usuario cierra la pestaña
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/checkout/finalize",
+          new Blob([payload], { type: "application/json" })
+        );
+      } else {
+        fetch("/api/checkout/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        }).catch(() => {});
+      }
+    };
+
+    // Llamar a los 90 s (ventana del upsell) y al cerrar la pestaña
+    const timer = setTimeout(callFinalize, 90_000);
+    window.addEventListener("beforeunload", callFinalize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("beforeunload", callFinalize);
+    };
+  }, [orderId, isContraentrega]);
 
   const handleUpsell = async () => {
     if (!orderId || upsellAdded || upsellLoading) return;
@@ -135,8 +168,6 @@ export default function ThankYouClient() {
     }
   };
 
-  const isFailure = status === "failure";
-  const isPending = status === "pending";
   const isSuccess = !isFailure && !isPending;
 
   const steps = order?.paymentMethod === "contraentrega" ? STEPS_COD : STEPS_MP;

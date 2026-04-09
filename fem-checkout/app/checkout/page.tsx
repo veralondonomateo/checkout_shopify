@@ -14,7 +14,7 @@ export default async function CheckoutPage({
 }) {
   const { product } = await searchParams;
 
-  const [shopifyProduct, gomitasProduct] = await Promise.all([
+  const [shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct] = await Promise.all([
     product
       ? getProductByHandle(product).catch((err) => {
           console.error("[Checkout] Error fetching main product:", err);
@@ -22,11 +22,18 @@ export default async function CheckoutPage({
         })
       : Promise.resolve(null),
     getProductByHandle("gomitas-sindrome-premestrual-x60").catch(() => null),
+    getProductByHandle("jabon-intimo-fem").catch(() => null),
+    getProductByHandle("ovulos-fem").catch(() => null),
   ]);
 
   return (
     <Suspense>
-      <CheckoutPageClient shopifyProduct={shopifyProduct} gomitasProduct={gomitasProduct} />
+      <CheckoutPageClient
+        shopifyProduct={shopifyProduct}
+        gomitasProduct={gomitasProduct}
+        jabonProduct={jabonProduct}
+        ovulosProduct={ovulosProduct}
+      />
     </Suspense>
   );
 }

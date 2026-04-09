@@ -29,6 +29,7 @@ function shopifyProductToItem(p: ShopifyProduct): OrderItem {
     price: Math.round(parseFloat(variant?.price ?? "0")),
     quantity: 1,
     image: p.images[0]?.src ?? "",
+    shopifyVariantId: variant?.id,
   };
 }
 
@@ -80,9 +81,11 @@ const COUPON_CODES: Record<string, number> = {
 interface CheckoutPageClientProps {
   shopifyProduct?: ShopifyProduct | null;
   gomitasProduct?: ShopifyProduct | null;
+  jabonProduct?: ShopifyProduct | null;
+  ovulosProduct?: ShopifyProduct | null;
 }
 
-export default function CheckoutPageClient({ shopifyProduct, gomitasProduct }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
   const MAIN_ITEMS: OrderItem[] = shopifyProduct
     ? [shopifyProductToItem(shopifyProduct)]
@@ -113,26 +116,32 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct }: C
     setCouponError("");
   };
 
-  // ── Upsell catalog: fill Gomitas from Shopify + filter main product ──────
+  // ── Upsell catalog: fill data from Shopify + filter main product ─────────
   const UPSELL_PRODUCTS = useMemo<UpsellProduct[]>(() => {
     const filled = BASE_UPSELLS.map((p) => {
       if (p.id === "gomitas-pms" && gomitasProduct) {
-        const variant = gomitasProduct.variants[0];
+        const v = gomitasProduct.variants[0];
         return {
           ...p,
-          price: Math.round(parseFloat(variant?.price ?? "0")),
+          price: Math.round(parseFloat(v?.price ?? "0")),
           image: gomitasProduct.images[0]?.src ?? p.image,
+          shopifyVariantId: v?.id,
         };
+      }
+      if (p.id === "jabon-intimo-fem" && jabonProduct) {
+        return { ...p, shopifyVariantId: jabonProduct.variants[0]?.id };
+      }
+      if (p.id === "ovulos-fem" && ovulosProduct) {
+        return { ...p, shopifyVariantId: ovulosProduct.variants[0]?.id };
       }
       return p;
     });
-    // Remove products with no price/image (Shopify data missing) and exclude main product
     return filled.filter((p) => {
       if (p.shopifyHandle === shopifyProduct?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
       return true;
     });
-  }, [gomitasProduct, shopifyProduct]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>
@@ -149,6 +158,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct }: C
       price: p.price,
       quantity: upsellQty[p.id],
       image: p.image,
+      shopifyVariantId: p.shopifyVariantId,
     }));
     return [...mainWithQty, ...added];
   }, [upsellQty, mainQty, UPSELL_PRODUCTS]);

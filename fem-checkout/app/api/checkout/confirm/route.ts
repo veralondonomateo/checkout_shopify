@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     if (order && !order.shopify_order_id) {
       const { data: items } = await supabase
         .from("order_items")
-        .select("name, variant, price, quantity")
+        .select("name, variant, price, quantity, shopify_variant_id")
         .eq("order_id", order_id);
 
       try {
@@ -101,7 +101,13 @@ export async function POST(req: NextRequest) {
           complement: order.complement,
           city: order.city,
           state: order.state,
-          items: items ?? [],
+          items: (items ?? []).map((i) => ({
+            name: i.name,
+            variant: i.variant,
+            price: i.price,
+            quantity: i.quantity,
+            shopifyVariantId: i.shopify_variant_id ?? undefined,
+          })),
           shipping: order.shipping ?? 0,
           total: order.total,
           paymentMethod: "mercadopago",
