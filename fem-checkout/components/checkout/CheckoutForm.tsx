@@ -14,14 +14,13 @@ import PaymentSection from "./PaymentSection";
 import Button from "@/components/ui/Button";
 
 const schema = z.object({
+  // Require a valid email — phone numbers break Mercado Pago's payer.email
   email: z
     .string()
     .min(1, "Este campo es obligatorio")
     .refine(
-      (v) =>
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ||
-        /^(\+57)?[\s-]?3\d{9}$/.test(v.replace(/\s/g, "")),
-      "Ingresa un email o teléfono válido"
+      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+      "Ingresa un email válido"
     ),
   firstName: z.string().min(2, "Ingresa tu nombre"),
   lastName: z.string().min(2, "Ingresa tu apellido"),
@@ -30,9 +29,14 @@ const schema = z.object({
   complement: z.string().optional(),
   state: z.string().min(1, "Selecciona un departamento"),
   city: z.string().min(1, "Selecciona una ciudad"),
+  // Strip spaces/dashes before validating — users often type "300 123 4567"
   phone: z
     .string()
-    .regex(/^\d{10}$/, "Número inválido"),
+    .refine(
+      (v) => /^\d{10}$/.test(v.replace(/[\s\-]/g, "")),
+      "Ingresa los 10 dígitos de tu celular"
+    )
+    .transform((v) => v.replace(/[\s\-]/g, "")),
   paymentMethod: z
     .enum(["mercadopago", "contraentrega"] as const)
     .refine((v) => v !== undefined, { message: "Selecciona un método de pago" }),
@@ -74,6 +78,7 @@ export default function CheckoutForm({
 }: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [couponOpen, setCouponOpen] = useState(false);
 
   const {
     register,
@@ -151,37 +156,50 @@ export default function CheckoutForm({
 
       <PaymentSection register={register} errors={errors} watch={watch} />
 
-      {/* Coupon — mobile only (desktop shows in OrderSummary sidebar) */}
-      <section className="bg-white rounded-lg border border-gray-200 p-4 lg:hidden">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Código de descuento</p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={coupon}
-            onChange={(e) => onCouponChange(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
-            placeholder="Ej: FEM10"
-            className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
-              focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors
-              ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
-            disabled={couponApplied}
-          />
+      {/* Coupon — mobile only, hidden behind toggle to avoid code-hunting */}
+      <div className="lg:hidden">
+        {!couponApplied && (
           <button
             type="button"
-            onClick={onCouponApply}
-            disabled={couponApplied || !coupon.trim()}
-            className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setCouponOpen((v) => !v)}
+            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
           >
-            {couponApplied ? "✓" : "Aplicar"}
+            {couponOpen ? "Ocultar código de descuento" : "¿Tienes un código de descuento?"}
           </button>
-        </div>
-        {couponError && <p className="text-xs text-red-500 mt-1.5">{couponError}</p>}
-        {couponApplied && discount > 0 && (
-          <p className="text-xs text-green-600 mt-1.5 font-medium">
-            Descuento aplicado: -{new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(discount)}
-          </p>
         )}
-      </section>
+        {(couponOpen || couponApplied) && (
+          <section className="bg-white rounded-lg border border-gray-200 p-4 mt-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={coupon}
+                onChange={(e) => onCouponChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
+                placeholder="Ej: FEM10"
+                className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
+                  focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors
+                  ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+                disabled={couponApplied}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={onCouponApply}
+                disabled={couponApplied || !coupon.trim()}
+                className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {couponApplied ? "✓" : "Aplicar"}
+              </button>
+            </div>
+            {couponError && <p className="text-xs text-red-500 mt-1.5">{couponError}</p>}
+            {couponApplied && discount > 0 && (
+              <p className="text-xs text-green-600 mt-1.5 font-medium">
+                Descuento aplicado: -{new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(discount)}
+              </p>
+            )}
+          </section>
+        )}
+      </div>
 
       {/* Billing address */}
       <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
