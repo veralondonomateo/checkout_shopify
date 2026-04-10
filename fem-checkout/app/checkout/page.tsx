@@ -32,20 +32,22 @@ export default async function CheckoutPage({
     return allProducts.find((p) => pattern.test(p.title)) ?? null;
   }
 
+  // Exact Shopify titles: "Gomitas Sindrome Premestrual x 60 UND",
+  //   "Jabón íntimo pH neutro x 200 ml", "Óvulos vaginales Fem x 6 UND"
   const gomitasProduct =
     allProducts.find((p) => p.handle === "gomitas-sindrome-premestrual-x60") ??
-    findByTitle(/gomitas?.*premenstrual/i) ??
-    findByTitle(/gomitas?.*pms/i);
+    findByTitle(/gomitas.*preme[ns]?trual/i) ??
+    findByTitle(/gomitas.*sindrome/i);
 
   const jabonProduct =
     allProducts.find((p) => p.handle === "jabon-intimo-fem") ??
     allProducts.find((p) => p.handle.includes("jabon") && p.handle.includes("intimo")) ??
-    findByTitle(/jab[oó]n.{0,10}[ií]ntimo/i);
+    findByTitle(/jab[oó]n\s*[ií]ntimo/i);
 
   const ovulosProduct =
     allProducts.find((p) => p.handle === "ovulos-fem") ??
     allProducts.find((p) => p.handle.includes("ovulo")) ??
-    findByTitle(/[oó]vulos?\s*fem/i) ??
+    findByTitle(/[oó]vulos\s*vaginales/i) ??
     findByTitle(/[oó]vulos/i);
 
   return (

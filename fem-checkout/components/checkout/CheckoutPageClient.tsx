@@ -39,9 +39,9 @@ function shopifyProductToItem(p: ShopifyProduct, variantId?: number): OrderItem 
 const BASE_UPSELLS: UpsellProduct[] = [
   {
     id: "jabon-intimo-fem",
-    name: "Jabón íntimo FEM",
-    variant: "200 ml · pH neutro",
-    price: 35000,
+    name: "Jabón íntimo pH neutro",
+    variant: "200 ml",
+    price: 29900,
     image: "https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Jabon-intimo-fem.webp?v=1772573021",
     benefit: "Higiene íntima con pH balanceado",
     stock: 7,

@@ -4,9 +4,9 @@ import { findProductByTitle, addNoteToShopifyOrder } from "@/lib/shopify";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
-  name: "Jabón Íntimo con Prebióticos",
-  variant: null,
-  price: 16000,
+  name: "Jabón íntimo pH neutro",
+  variant: "200 ml",
+  price: 19900,
   quantity: 1,
   image:
     "https://cdn.shopify.com/s/files/1/0611/6999/1768/files/Probiotico-jabon-5.jpg?v=1769877892",

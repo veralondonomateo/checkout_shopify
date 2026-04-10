@@ -325,10 +325,10 @@ export default function ThankYouClient() {
                             Jabón Íntimo con Prebióticos
                           </p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="text-sm font-bold text-gray-900">{formatCOP(16000)}</span>
+                            <span className="text-sm font-bold text-gray-900">{formatCOP(19900)}</span>
                             <span className="text-xs text-gray-400 line-through">{formatCOP(39000)}</span>
                             <span className="text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-1.5 py-0.5 rounded">
-                              -59%
+                              -49%
                             </span>
                           </div>
                         </div>
