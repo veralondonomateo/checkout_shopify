@@ -9,7 +9,6 @@ import CheckoutHeader from "./CheckoutHeader";
 import CheckoutForm from "./CheckoutForm";
 import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
-import ExitIntentPopup from "./ExitIntentPopup";
 
 const DEFAULT_ITEM: OrderItem = {
   id: "prod_001",
@@ -77,7 +76,6 @@ const SHIPPING = 15000;
 // Valid codes → discount rate
 const COUPON_CODES: Record<string, number> = {
   FEM10: 0.1,
-  MISTERIOSO: 0.05,
 };
 
 interface CheckoutPageClientProps {
@@ -232,8 +230,6 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
         mainQty={mainQty}
         onMainQtyChange={setMainQty}
       />
-
-      <ExitIntentPopup couponApplied={couponApplied} />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 items-start">

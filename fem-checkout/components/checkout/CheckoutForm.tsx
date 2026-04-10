@@ -73,7 +73,7 @@ export default function CheckoutForm({
   onCouponApply,
 }: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const {
     register,
@@ -91,6 +91,7 @@ export default function CheckoutForm({
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
+    setSubmitError("");
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -111,48 +112,29 @@ export default function CheckoutForm({
       const result = await res.json();
 
       // Guardar datos de la orden para la página de gracias (display)
-      const orderPayload = {
+      sessionStorage.setItem("fem-order", JSON.stringify({
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email,
         items: allItems,
         total,
         paymentMethod: data.paymentMethod,
-      };
-      sessionStorage.setItem("fem-order", JSON.stringify(orderPayload));
+      }));
 
       if (result.type === "contraentrega") {
         window.location.href = `/checkout/thank-you?status=success&method=contraentrega&order_id=${result.order_id}`;
       } else if (result.init_point) {
-        // El order_id ya viene embebido en la back_url que MP devuelve
         window.location.href = result.init_point;
       } else {
         throw new Error("No se recibió URL de pago");
       }
     } catch (err) {
       console.error("Checkout error:", err);
-      setSubmitted(true); // fallback: show confirmation anyway
+      setSubmitError("Ocurrió un error al procesar tu pedido. Por favor intenta de nuevo.");
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center space-y-4 bg-white rounded-lg border border-gray-200 p-8">
-        <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mb-2">
-          <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900">¡Pedido recibido!</h2>
-        <p className="text-gray-500 text-sm max-w-xs">
-          Te enviaremos un SMS con el número de seguimiento de tu pedido.
-        </p>
-        <p className="text-xs text-gray-400">FEM – Hecho con amor en Colombia 🇨🇴</p>
-      </div>
-    );
-  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
@@ -214,6 +196,14 @@ export default function CheckoutForm({
 
       {/* Submit CTA */}
       <div className="sticky bottom-0 pb-4 pt-2 bg-[#f5f5f5]">
+        {submitError && (
+          <div className="mb-3 px-4 py-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2">
+            <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-xs text-red-700">{submitError}</p>
+          </div>
+        )}
         <Button
           type="submit"
           fullWidth
