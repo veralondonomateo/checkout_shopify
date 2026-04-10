@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -83,6 +83,20 @@ const STEPS_COD = [
   },
 ];
 
+/** Calls /finalize once. Uses a ref so multiple callers don't double-create. */
+function triggerFinalize(
+  orderId: string | null,
+  ref: React.MutableRefObject<boolean>
+) {
+  if (!orderId || ref.current) return;
+  ref.current = true;
+  fetch("/api/checkout/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order_id: orderId }),
+  }).catch((err) => console.error("[Finalize]", err));
+}
+
 export default function ThankYouClient() {
   const searchParams = useSearchParams();
   const status = searchParams.get("status");
@@ -91,6 +105,8 @@ export default function ThankYouClient() {
   const [order, setOrder] = useState<StoredOrder | null>(null);
   const [upsellAdded, setUpsellAdded] = useState(false);
   const [upsellLoading, setUpsellLoading] = useState(false);
+  const [upsellDismissed, setUpsellDismissed] = useState(false);
+  const finalizedRef = useRef(false);
 
   const orderId = searchParams.get("order_id");
   const isFailure = status === "failure";
@@ -121,13 +137,15 @@ export default function ThankYouClient() {
     }
   }, []);
 
-  // ── Finalize: crear orden Shopify para contraentrega tras ventana de upsell
+  // ── Finalize: crear orden en Shopify con todos los items actuales ────────
+  // Se llama cuando el usuario toma una decisión sobre el upsell (acepta o
+  // descarta). Timer de 45s y sendBeacon son seguros de redes únicamente.
   useEffect(() => {
     if (!orderId || !isContraentrega) return;
 
-    const callFinalize = () => {
+    // sendBeacon para cuando el usuario cierra la pestaña
+    const beaconFinalize = () => {
       const payload = JSON.stringify({ order_id: orderId });
-      // sendBeacon garantiza envío incluso si el usuario cierra la pestaña
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
           "/api/checkout/finalize",
@@ -142,12 +160,12 @@ export default function ThankYouClient() {
       }
     };
 
-    // Llamar a los 90 s (ventana del upsell) y al cerrar la pestaña
-    const timer = setTimeout(callFinalize, 90_000);
-    window.addEventListener("beforeunload", callFinalize);
+    // Fallback: si el usuario no interactúa en 45s, crear la orden igual
+    const timer = setTimeout(() => triggerFinalize(orderId, finalizedRef), 45_000);
+    window.addEventListener("beforeunload", beaconFinalize);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener("beforeunload", callFinalize);
+      window.removeEventListener("beforeunload", beaconFinalize);
     };
   }, [orderId, isContraentrega]);
 
@@ -160,12 +178,22 @@ export default function ThankYouClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_id: orderId }),
       });
-      if (res.ok) setUpsellAdded(true);
+      if (res.ok) {
+        setUpsellAdded(true);
+        // Crear la orden en Shopify ahora que el jabón ya está en Supabase
+        triggerFinalize(orderId, finalizedRef);
+      }
     } catch (err) {
       console.error("Upsell error:", err);
     } finally {
       setUpsellLoading(false);
     }
+  };
+
+  const handleDismissUpsell = () => {
+    setUpsellDismissed(true);
+    // Crear la orden en Shopify sin el jabón
+    triggerFinalize(orderId, finalizedRef);
   };
 
   const isSuccess = !isFailure && !isPending;
@@ -269,7 +297,7 @@ export default function ThankYouClient() {
             </div>
 
             {/* ── POST-PURCHASE UPSELL (solo contraentrega) ── */}
-            {order?.paymentMethod === "contraentrega" && (
+            {order?.paymentMethod === "contraentrega" && !upsellDismissed && (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {/* Foto del equipo */}
                 <div className="relative w-full aspect-[3/2] sm:aspect-[16/7]">
@@ -333,8 +361,8 @@ export default function ThankYouClient() {
                           </div>
                         </div>
                       </div>
-                      {/* Botón ancho completo */}
-                      <div className="px-3 pb-3">
+                      {/* Botones */}
+                      <div className="px-3 pb-3 space-y-2">
                         <button
                           type="button"
                           onClick={handleUpsell}
@@ -352,6 +380,13 @@ export default function ThankYouClient() {
                             </svg>
                           )}
                           Añadir a mi pedido
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDismissUpsell}
+                          className="w-full py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          No gracias, continuar sin el jabón
                         </button>
                       </div>
                     </div>

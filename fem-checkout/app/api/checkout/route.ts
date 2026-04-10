@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
-import { createShopifyOrder } from "@/lib/shopify";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
@@ -94,42 +93,11 @@ export async function POST(req: NextRequest) {
     console.error("Supabase items insert error:", itemsError);
   }
 
-  // ── 3. Contraentrega: crear orden en Shopify de inmediato ───────────────
+  // ── 3. Contraentrega: solo guardar en Supabase, NO crear en Shopify aún ──
+  // La orden se crea en Shopify desde /finalize, que se llama desde el
+  // thank-you page cuando el usuario decide sobre el upsell del jabón
+  // (acepta o descarta). Así llega completa a Shopify y a MasterShop.
   if (body.paymentMethod === "contraentrega") {
-    try {
-      const shopifyId = await createShopifyOrder({
-        email: body.email,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        phone: body.phone,
-        address: body.address,
-        complement: body.complement,
-        city: body.city,
-        state: body.state,
-        items: body.items.map((item) => ({
-          name: item.name,
-          variant: item.variant,
-          price: item.price,
-          quantity: item.quantity,
-          shopifyVariantId: item.shopifyVariantId ?? undefined,
-        })),
-        shipping: body.shipping,
-        total: body.total,
-        paymentMethod: "contraentrega",
-        femOrderId: orderId,
-      });
-
-      await supabase
-        .from("orders")
-        .update({ shopify_order_id: shopifyId, shopify_error: null })
-        .eq("id", orderId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[Checkout] Error creando orden Shopify contraentrega:", msg);
-      await supabase.from("orders").update({ shopify_error: msg }).eq("id", orderId);
-      // No bloqueamos la respuesta — la orden Supabase ya existe
-    }
-
     return NextResponse.json({
       type: "contraentrega",
       status: "approved",
