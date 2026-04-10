@@ -33,7 +33,7 @@ async function getAccessToken(): Promise<string> {
   return tokenCache.token;
 }
 
-// ── HTTP client ────────────────────────────────────────────────────────────────
+// ── REST client ────────────────────────────────────────────────────────────────
 const API_VERSION = "2024-10";
 
 async function shopifyFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -55,6 +55,38 @@ async function shopifyFetch<T>(path: string, options?: RequestInit): Promise<T> 
   return res.json();
 }
 
+// ── GraphQL client ─────────────────────────────────────────────────────────────
+async function shopifyGraphQL<T>(
+  query: string,
+  variables: Record<string, unknown>
+): Promise<T> {
+  const token = await getAccessToken();
+  const url = `https://${process.env.SHOPIFY_DOMAIN}/admin/api/${API_VERSION}/graphql.json`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-Shopify-Access-Token": token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Shopify GraphQL ${res.status}: ${text}`);
+  }
+  const json = (await res.json()) as {
+    data?: T;
+    errors?: Array<{ message: string }>;
+  };
+  if (json.errors?.length) {
+    throw new Error(
+      `Shopify GraphQL errors: ${json.errors.map((e) => e.message).join(", ")}`
+    );
+  }
+  return json.data as T;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 export interface ShopifyVariant {
   id: number;
@@ -74,7 +106,7 @@ export interface ShopifyProduct {
 
 // ── Product cache (5 min TTL) ──────────────────────────────────────────────────
 let productCache: { products: ShopifyProduct[]; fetchedAt: number } | null = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 async function getCachedProducts(): Promise<ShopifyProduct[]> {
   const now = Date.now();
@@ -111,7 +143,7 @@ export async function getProductByHandle(
   );
   if (data.products[0]) return data.products[0];
 
-  // Fallback: search all cached products by handle contains
+  // Fallback: search all cached products by handle similarity
   const products = await getCachedProducts();
   return (
     products.find(
@@ -148,12 +180,14 @@ export async function createShopifyOrder(
   input: ShopifyOrderInput
 ): Promise<number> {
   const isPaid = input.paymentMethod === "mercadopago";
+  const gatewayName = isPaid ? "Mercado Pago" : "Contraentrega";
 
   const orderBody: Record<string, unknown> = {
     email: input.email,
     financial_status: isPaid ? "paid" : "pending",
     currency: "COP",
     suppress_notifications: true,
+    payment_gateway_names: [gatewayName],
     line_items: input.items.map((item) => {
       const base: Record<string, unknown> = {
         price: item.price.toFixed(2),
@@ -221,13 +255,104 @@ export async function createShopifyOrder(
   return result.order.id;
 }
 
+// ── Add line item to existing order (Order Editing API — GraphQL) ──────────────
+/**
+ * Adds a product line item to an existing Shopify order via the Order Editing API.
+ * Uses orderEditAddCustomItem to guarantee the exact price regardless of the
+ * variant's current Shopify price (important for discounted upsells).
+ * Falls back to a plain note if the edit fails.
+ */
+export async function addLineItemToShopifyOrder(
+  shopifyOrderId: number,
+  item: {
+    name: string;
+    variant?: string | null;
+    price: number;
+    quantity: number;
+  }
+): Promise<void> {
+  const orderId = `gid://shopify/Order/${shopifyOrderId}`;
+  const title = item.variant ? `${item.name} – ${item.variant}` : item.name;
+
+  // Step 1: Begin order edit
+  const beginData = await shopifyGraphQL<{
+    orderEditBegin: {
+      calculatedOrder: { id: string } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation Begin($id: ID!) {
+      orderEditBegin(id: $id) {
+        calculatedOrder { id }
+        userErrors { field message }
+      }
+    }`,
+    { id: orderId }
+  );
+
+  const beginErrors = beginData.orderEditBegin.userErrors;
+  if (beginErrors.length > 0) {
+    throw new Error(`orderEditBegin: ${beginErrors.map((e) => e.message).join(", ")}`);
+  }
+  const calcId = beginData.orderEditBegin.calculatedOrder?.id;
+  if (!calcId) throw new Error("orderEditBegin returned no calculatedOrder");
+
+  // Step 2: Add custom item at the exact upsell price
+  const addData = await shopifyGraphQL<{
+    orderEditAddCustomItem: {
+      calculatedLineItem: { id: string } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation AddCustom($id: ID!, $title: String!, $price: MoneyInput!, $qty: Int!) {
+      orderEditAddCustomItem(id: $id, title: $title, price: $price, quantity: $qty, requiresShipping: true) {
+        calculatedLineItem { id }
+        userErrors { field message }
+      }
+    }`,
+    {
+      id: calcId,
+      title,
+      price: { amount: item.price.toFixed(2), currencyCode: "COP" },
+      qty: item.quantity,
+    }
+  );
+
+  const addErrors = addData.orderEditAddCustomItem.userErrors;
+  if (addErrors.length > 0) {
+    throw new Error(`orderEditAddCustomItem: ${addErrors.map((e) => e.message).join(", ")}`);
+  }
+
+  // Step 3: Commit the edit
+  const commitData = await shopifyGraphQL<{
+    orderEditCommit: {
+      order: { id: string } | null;
+      userErrors: Array<{ field: string[]; message: string }>;
+    };
+  }>(
+    `mutation Commit($id: ID!, $staffNote: String!) {
+      orderEditCommit(id: $id, notifyCustomer: false, staffNote: $staffNote) {
+        order { id }
+        userErrors { field message }
+      }
+    }`,
+    { id: calcId, staffNote: "Upsell post-compra: jabón añadido desde thank-you page" }
+  );
+
+  const commitErrors = commitData.orderEditCommit.userErrors;
+  if (commitErrors.length > 0) {
+    throw new Error(`orderEditCommit: ${commitErrors.map((e) => e.message).join(", ")}`);
+  }
+
+  console.log(`[Shopify] Line item "${title}" añadido a orden ${shopifyOrderId}`);
+}
+
 // ── Order notes ────────────────────────────────────────────────────────────────
-/** Append a note to an existing Shopify order (PUT /orders/{id}.json) */
+/** Append a plain text note to an existing Shopify order */
 export async function addNoteToShopifyOrder(
   shopifyOrderId: number,
   note: string
 ): Promise<void> {
-  // Fetch current note first to append
   const current = await shopifyFetch<{ order: { note: string | null } }>(
     `/orders/${shopifyOrderId}.json?fields=note`
   );
