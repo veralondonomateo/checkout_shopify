@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
+import { sendPurchaseEvent } from "@/lib/meta";
 
 type DBPaymentStatus = "pending" | "approved" | "failure" | "in_process";
 
@@ -114,6 +115,23 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error("[MP Webhook] Error actualizando orden:", error);
       return NextResponse.json({ error: "DB error" }, { status: 500 });
+    }
+
+    // Conversions API: Purchase cuando MP confirma el pago
+    if (status === "approved") {
+      const { data: orderForMeta } = await supabase
+        .from("orders")
+        .select("email, phone, total")
+        .eq("id", orderId)
+        .single();
+      if (orderForMeta) {
+        sendPurchaseEvent({
+          orderId,
+          email: orderForMeta.email,
+          phone: orderForMeta.phone,
+          value: orderForMeta.total,
+        }).catch(() => {});
+      }
     }
 
     // Crear orden en Shopify cuando el pago es aprobado

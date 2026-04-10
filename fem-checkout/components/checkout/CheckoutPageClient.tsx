@@ -97,6 +97,13 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   const [mainQty, setMainQty] = useState(initialQty ?? 1);
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
+  // Disparar InitiateCheckout al cargar la página
+  useEffect(() => {
+    if (typeof window !== "undefined" && (window as any).fbq) {
+      (window as any).fbq("track", "InitiateCheckout");
+    }
+  }, []);
+
   // ── Coupon state (shared between form and order summary) ──────────────────
   const [coupon, setCoupon] = useState("");
   const [couponApplied, setCouponApplied] = useState(false);

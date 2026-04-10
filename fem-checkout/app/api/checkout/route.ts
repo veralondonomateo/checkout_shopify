@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
+import { sendPurchaseEvent } from "@/lib/meta";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
@@ -98,6 +99,18 @@ export async function POST(req: NextRequest) {
   // thank-you page cuando el usuario decide sobre el upsell del jabón
   // (acepta o descarta). Así llega completa a Shopify y a MasterShop.
   if (body.paymentMethod === "contraentrega") {
+    // Conversions API: Purchase (contraentrega se considera conversión al registrar el pedido)
+    sendPurchaseEvent({
+      orderId,
+      email: body.email,
+      phone: body.phone,
+      value: body.total,
+      clientIp: req.headers.get("x-forwarded-for")?.split(",")[0] ?? undefined,
+      clientUserAgent: req.headers.get("user-agent") ?? undefined,
+      fbp: req.cookies.get("_fbp")?.value,
+      fbc: req.cookies.get("_fbc")?.value,
+    }).catch(() => {});
+
     return NextResponse.json({
       type: "contraentrega",
       status: "approved",
