@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { getProductByHandle } from "@/lib/shopify";
+import { findProductByTitle, addNoteToShopifyOrder } from "@/lib/shopify";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
@@ -39,12 +39,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, already: true });
   }
 
-  // Obtener variant_id de Shopify para enlazar el producto correctamente
+  // Obtener variant_id de Shopify buscando por título (no depende del handle exacto)
   let shopifyVariantId: number | null = null;
   try {
-    const jabonShopify = await getProductByHandle("jabon-intimo-fem");
+    const jabonShopify = await findProductByTitle(/jab[oó]n.{0,10}[ií]ntimo/i);
     shopifyVariantId = jabonShopify?.variants[0]?.id ?? null;
-  } catch {}
+    if (jabonShopify) {
+      console.log(`[Upsell] Jabón encontrado: ${jabonShopify.title} (handle: ${jabonShopify.handle})`);
+    }
+  } catch (err) {
+    console.error("[Upsell] Error buscando jabón en Shopify:", err);
+  }
 
   // Insertar item
   const { error: insertError } = await supabase.from("order_items").insert({
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest) {
     // Fallback manual si el RPC no existe
     const { data: order } = await supabase
       .from("orders")
-      .select("total")
+      .select("total, shopify_order_id")
       .eq("id", order_id)
       .single();
 
@@ -82,6 +87,38 @@ export async function POST(req: NextRequest) {
         .from("orders")
         .update({ total: order.total + JABON.price })
         .eq("id", order_id);
+
+      // Añadir nota a la orden de Shopify si ya existe
+      if (order.shopify_order_id) {
+        try {
+          await addNoteToShopifyOrder(
+            order.shopify_order_id,
+            `UPSELL AÑADIDO: ${JABON.name} x${JABON.quantity} — $${JABON.price.toLocaleString("es-CO")} COP`
+          );
+          console.log(`[Upsell] Nota añadida a Shopify orden #${order.shopify_order_id}`);
+        } catch (err) {
+          console.error("[Upsell] Error añadiendo nota a Shopify:", err);
+        }
+      }
+    }
+  } else {
+    // Si el RPC funcionó, también buscamos la orden para añadir la nota
+    const { data: order } = await supabase
+      .from("orders")
+      .select("shopify_order_id")
+      .eq("id", order_id)
+      .single();
+
+    if (order?.shopify_order_id) {
+      try {
+        await addNoteToShopifyOrder(
+          order.shopify_order_id,
+          `UPSELL AÑADIDO: ${JABON.name} x${JABON.quantity} — $${JABON.price.toLocaleString("es-CO")} COP`
+        );
+        console.log(`[Upsell] Nota añadida a Shopify orden #${order.shopify_order_id}`);
+      } catch (err) {
+        console.error("[Upsell] Error añadiendo nota a Shopify:", err);
+      }
     }
   }
 

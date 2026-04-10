@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
+import { createShopifyOrder } from "@/lib/shopify";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
@@ -93,10 +94,42 @@ export async function POST(req: NextRequest) {
     console.error("Supabase items insert error:", itemsError);
   }
 
-  // ── 3. Contraentrega: responder — Shopify se crea via /finalize ─────────
-  // La orden Shopify se crea desde el thank-you page después de la ventana
-  // de upsell (90 s), para incluir cualquier producto añadido en ese flujo.
+  // ── 3. Contraentrega: crear orden en Shopify de inmediato ───────────────
   if (body.paymentMethod === "contraentrega") {
+    try {
+      const shopifyId = await createShopifyOrder({
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        phone: body.phone,
+        address: body.address,
+        complement: body.complement,
+        city: body.city,
+        state: body.state,
+        items: body.items.map((item) => ({
+          name: item.name,
+          variant: item.variant,
+          price: item.price,
+          quantity: item.quantity,
+          shopifyVariantId: item.shopifyVariantId ?? undefined,
+        })),
+        shipping: body.shipping,
+        total: body.total,
+        paymentMethod: "contraentrega",
+        femOrderId: orderId,
+      });
+
+      await supabase
+        .from("orders")
+        .update({ shopify_order_id: shopifyId, shopify_error: null })
+        .eq("id", orderId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Checkout] Error creando orden Shopify contraentrega:", msg);
+      await supabase.from("orders").update({ shopify_error: msg }).eq("id", orderId);
+      // No bloqueamos la respuesta — la orden Supabase ya existe
+    }
+
     return NextResponse.json({
       type: "contraentrega",
       status: "approved",

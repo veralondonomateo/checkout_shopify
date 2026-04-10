@@ -72,6 +72,28 @@ export interface ShopifyProduct {
   images: { id: number; src: string }[];
 }
 
+// ── Product cache (5 min TTL) ──────────────────────────────────────────────────
+let productCache: { products: ShopifyProduct[]; fetchedAt: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedProducts(): Promise<ShopifyProduct[]> {
+  const now = Date.now();
+  if (productCache && now - productCache.fetchedAt < CACHE_TTL) {
+    return productCache.products;
+  }
+  const products = await getProducts();
+  productCache = { products, fetchedAt: now };
+  return products;
+}
+
+/** Find the first active product whose title matches a pattern */
+export async function findProductByTitle(
+  pattern: RegExp
+): Promise<ShopifyProduct | null> {
+  const products = await getCachedProducts();
+  return products.find((p) => pattern.test(p.title)) ?? null;
+}
+
 // ── Product queries ────────────────────────────────────────────────────────────
 export async function getProducts(): Promise<ShopifyProduct[]> {
   const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
@@ -83,10 +105,19 @@ export async function getProducts(): Promise<ShopifyProduct[]> {
 export async function getProductByHandle(
   handle: string
 ): Promise<ShopifyProduct | null> {
+  // Try exact handle first
   const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
     `/products.json?handle=${encodeURIComponent(handle)}&limit=1`
   );
-  return data.products[0] ?? null;
+  if (data.products[0]) return data.products[0];
+
+  // Fallback: search all cached products by handle contains
+  const products = await getCachedProducts();
+  return (
+    products.find(
+      (p) => p.handle === handle || p.handle.includes(handle.replace(/-/g, ""))
+    ) ?? null
+  );
 }
 
 // ── Order creation ─────────────────────────────────────────────────────────────
@@ -136,11 +167,6 @@ export async function createShopifyOrder(
       }
       return base;
     }),
-    customer: {
-      first_name: input.firstName,
-      last_name: input.lastName,
-      email: input.email,
-    },
     shipping_address: {
       first_name: input.firstName,
       last_name: input.lastName,
@@ -193,4 +219,23 @@ export async function createShopifyOrder(
     `[Shopify] Orden #${result.order.order_number} creada (ID: ${result.order.id})`
   );
   return result.order.id;
+}
+
+// ── Order notes ────────────────────────────────────────────────────────────────
+/** Append a note to an existing Shopify order (PUT /orders/{id}.json) */
+export async function addNoteToShopifyOrder(
+  shopifyOrderId: number,
+  note: string
+): Promise<void> {
+  // Fetch current note first to append
+  const current = await shopifyFetch<{ order: { note: string | null } }>(
+    `/orders/${shopifyOrderId}.json?fields=note`
+  );
+  const existing = current.order.note ?? "";
+  const combined = existing ? `${existing}\n${note}` : note;
+
+  await shopifyFetch(`/orders/${shopifyOrderId}.json`, {
+    method: "PUT",
+    body: JSON.stringify({ order: { note: combined } }),
+  });
 }

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
-import { getProductByHandle, ShopifyProduct } from "@/lib/shopify";
+import { getProducts, getProductByHandle, ShopifyProduct } from "@/lib/shopify";
 
 export const metadata = {
   title: "FEM | Finalizar compra",
@@ -16,25 +16,45 @@ export default async function CheckoutPage({
   const initialVariantId = variant ? parseInt(variant, 10) || undefined : undefined;
   const initialQty = qty ? Math.max(1, parseInt(qty, 10) || 1) : undefined;
 
-  const [shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct] = await Promise.all([
+  // Fetch all active products once, then match by handle/title — avoids
+  // multiple round-trips and handles when exact handles differ from constants.
+  const [allProducts, shopifyProduct] = await Promise.all([
+    getProducts().catch(() => [] as ShopifyProduct[]),
     product
       ? getProductByHandle(product).catch((err) => {
           console.error("[Checkout] Error fetching main product:", err);
           return null;
         })
       : Promise.resolve(null),
-    getProductByHandle("gomitas-sindrome-premestrual-x60").catch(() => null),
-    getProductByHandle("jabon-intimo-fem").catch(() => null),
-    getProductByHandle("ovulos-fem").catch(() => null),
   ]);
+
+  function findByTitle(pattern: RegExp): ShopifyProduct | null {
+    return allProducts.find((p) => pattern.test(p.title)) ?? null;
+  }
+
+  const gomitasProduct =
+    allProducts.find((p) => p.handle === "gomitas-sindrome-premestrual-x60") ??
+    findByTitle(/gomitas?.*premenstrual/i) ??
+    findByTitle(/gomitas?.*pms/i);
+
+  const jabonProduct =
+    allProducts.find((p) => p.handle === "jabon-intimo-fem") ??
+    allProducts.find((p) => p.handle.includes("jabon") && p.handle.includes("intimo")) ??
+    findByTitle(/jab[oó]n.{0,10}[ií]ntimo/i);
+
+  const ovulosProduct =
+    allProducts.find((p) => p.handle === "ovulos-fem") ??
+    allProducts.find((p) => p.handle.includes("ovulo")) ??
+    findByTitle(/[oó]vulos?\s*fem/i) ??
+    findByTitle(/[oó]vulos/i);
 
   return (
     <Suspense>
       <CheckoutPageClient
         shopifyProduct={shopifyProduct}
-        gomitasProduct={gomitasProduct}
-        jabonProduct={jabonProduct}
-        ovulosProduct={ovulosProduct}
+        gomitasProduct={gomitasProduct ?? null}
+        jabonProduct={jabonProduct ?? null}
+        ovulosProduct={ovulosProduct ?? null}
         initialVariantId={initialVariantId}
         initialQty={initialQty}
       />
