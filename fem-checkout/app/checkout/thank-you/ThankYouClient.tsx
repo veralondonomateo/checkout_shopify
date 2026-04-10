@@ -134,7 +134,15 @@ export default function ThankYouClient() {
     const raw = sessionStorage.getItem("fem-order");
     if (raw) {
       try {
-        setOrder(JSON.parse(raw));
+        const parsed: StoredOrder = JSON.parse(raw);
+        setOrder(parsed);
+        // Purchase pixel (navegador) — se deduplica con CAPI por event_id
+        if (orderId && !isFailure && !isPending && typeof window !== "undefined" && (window as any).fbq) {
+          (window as any).fbq("track", "Purchase", {
+            value: parsed.total,
+            currency: "COP",
+          }, { eventID: `purchase_${orderId}` });
+        }
       } catch {}
     }
 
