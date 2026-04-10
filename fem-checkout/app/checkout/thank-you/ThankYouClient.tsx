@@ -83,18 +83,33 @@ const STEPS_COD = [
   },
 ];
 
-/** Calls /finalize once. Uses a ref so multiple callers don't double-create. */
+/**
+ * Calls /finalize and only marks ref=true on a successful response.
+ * If the request fails, ref stays false so the 45s timer can retry.
+ * Server-side is idempotent (skips if shopify_order_id already set).
+ */
 function triggerFinalize(
   orderId: string | null,
   ref: React.MutableRefObject<boolean>
 ) {
   if (!orderId || ref.current) return;
-  ref.current = true;
+  ref.current = true; // optimistic — prevents pile-up of concurrent calls
   fetch("/api/checkout/finalize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ order_id: orderId }),
-  }).catch((err) => console.error("[Finalize]", err));
+  })
+    .then((res) => {
+      if (!res.ok) {
+        // Allow the next caller (e.g. 45s timer) to retry
+        ref.current = false;
+        console.error("[Finalize] HTTP", res.status);
+      }
+    })
+    .catch((err) => {
+      ref.current = false;
+      console.error("[Finalize]", err);
+    });
 }
 
 export default function ThankYouClient() {
