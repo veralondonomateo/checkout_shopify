@@ -180,14 +180,12 @@ export async function createShopifyOrder(
   input: ShopifyOrderInput
 ): Promise<number> {
   const isPaid = input.paymentMethod === "mercadopago";
-  const gatewayName = isPaid ? "Mercado Pago" : "Contraentrega";
 
   const orderBody: Record<string, unknown> = {
     email: input.email,
     financial_status: isPaid ? "paid" : "pending",
     currency: "COP",
     suppress_notifications: true,
-    payment_gateway_names: [gatewayName],
     line_items: input.items.map((item) => {
       const base: Record<string, unknown> = {
         price: item.price.toFixed(2),
@@ -231,6 +229,7 @@ export async function createShopifyOrder(
     ];
   }
 
+  // transactions[].gateway es lo que Shopify usa para llenar payment_gateway_names
   if (isPaid) {
     orderBody.transactions = [
       {
@@ -238,6 +237,18 @@ export async function createShopifyOrder(
         status: "success",
         amount: input.total.toFixed(2),
         gateway: "mercadopago",
+      },
+    ];
+  } else {
+    // Contraentrega: transacción pendiente — Shopify llena payment_gateway_names
+    // con el valor de gateway. El nombre debe coincidir exactamente con el
+    // método de pago manual configurado en Shopify Settings > Payments.
+    orderBody.transactions = [
+      {
+        kind: "sale",
+        status: "pending",
+        amount: input.total.toFixed(2),
+        gateway: "contraentrega",
       },
     ];
   }
