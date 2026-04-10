@@ -39,13 +39,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, already: true });
   }
 
-  // Obtener shopify_variant_id del jabón (para guardarlo en Supabase)
+  // Obtener shopify_variant_id y precio actual del jabón en Shopify
   let shopifyVariantId: number | null = null;
+  let shopifyVariantPrice: number | null = null;
   try {
     const jabonShopify = await findProductByTitle(/jab[oó]n\s*[ií]ntimo/i);
-    shopifyVariantId = jabonShopify?.variants[0]?.id ?? null;
     if (jabonShopify) {
-      console.log(`[Upsell] Jabón encontrado: ${jabonShopify.title} (handle: ${jabonShopify.handle})`);
+      shopifyVariantId = jabonShopify.variants[0]?.id ?? null;
+      shopifyVariantPrice = parseFloat(jabonShopify.variants[0]?.price ?? "0") || null;
+      console.log(`[Upsell] Jabón encontrado: ${jabonShopify.title} — precio Shopify: ${shopifyVariantPrice}`);
     }
   } catch (err) {
     console.error("[Upsell] Error buscando jabón en Shopify:", err);
@@ -103,6 +105,8 @@ export async function POST(req: NextRequest) {
         variant: JABON.variant,
         price: JABON.price,
         quantity: JABON.quantity,
+        shopifyVariantId,
+        shopifyVariantPrice,
       });
       console.log(`[Upsell] Line item añadido a Shopify orden #${ord.shopify_order_id}`);
     } catch (err) {

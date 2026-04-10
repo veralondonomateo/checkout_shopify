@@ -258,17 +258,19 @@ export async function createShopifyOrder(
 // ── Add line item to existing order (Order Editing API — GraphQL) ──────────────
 /**
  * Adds a product line item to an existing Shopify order via the Order Editing API.
- * Uses orderEditAddCustomItem to guarantee the exact price regardless of the
- * variant's current Shopify price (important for discounted upsells).
- * Falls back to a plain note if the edit fails.
+ * When shopifyVariantId is provided, links to the real Shopify product/variant
+ * (inventory tracked) and applies a price override if the variant's Shopify price
+ * differs from the desired upsell price. Falls back to a custom item if no variant.
  */
 export async function addLineItemToShopifyOrder(
   shopifyOrderId: number,
   item: {
     name: string;
     variant?: string | null;
-    price: number;
+    price: number; // desired final price (COP)
     quantity: number;
+    shopifyVariantId?: number | null; // links to real Shopify product
+    shopifyVariantPrice?: number | null; // current Shopify variant price (for discount calc)
   }
 ): Promise<void> {
   const orderId = `gid://shopify/Order/${shopifyOrderId}`;
@@ -297,30 +299,91 @@ export async function addLineItemToShopifyOrder(
   const calcId = beginData.orderEditBegin.calculatedOrder?.id;
   if (!calcId) throw new Error("orderEditBegin returned no calculatedOrder");
 
-  // Step 2: Add custom item at the exact upsell price
-  const addData = await shopifyGraphQL<{
-    orderEditAddCustomItem: {
-      calculatedLineItem: { id: string } | null;
-      userErrors: Array<{ field: string[]; message: string }>;
-    };
-  }>(
-    `mutation AddCustom($id: ID!, $title: String!, $price: MoneyInput!, $qty: Int!) {
-      orderEditAddCustomItem(id: $id, title: $title, price: $price, quantity: $qty, requiresShipping: true) {
-        calculatedLineItem { id }
-        userErrors { field message }
-      }
-    }`,
-    {
-      id: calcId,
-      title,
-      price: { amount: item.price.toFixed(2), currencyCode: "COP" },
-      qty: item.quantity,
-    }
-  );
+  let lineItemId: string | null = null;
 
-  const addErrors = addData.orderEditAddCustomItem.userErrors;
-  if (addErrors.length > 0) {
-    throw new Error(`orderEditAddCustomItem: ${addErrors.map((e) => e.message).join(", ")}`);
+  if (item.shopifyVariantId) {
+    // Step 2a: Add by variant → properly linked to the Shopify product
+    const addData = await shopifyGraphQL<{
+      orderEditAddVariant: {
+        calculatedLineItem: { id: string } | null;
+        userErrors: Array<{ field: string[]; message: string }>;
+      };
+    }>(
+      `mutation AddVariant($id: ID!, $variantId: ID!, $qty: Int!) {
+        orderEditAddVariant(id: $id, variantId: $variantId, quantity: $qty, allowDuplicates: true) {
+          calculatedLineItem { id }
+          userErrors { field message }
+        }
+      }`,
+      {
+        id: calcId,
+        variantId: `gid://shopify/ProductVariant/${item.shopifyVariantId}`,
+        qty: item.quantity,
+      }
+    );
+
+    const addErrors = addData.orderEditAddVariant.userErrors;
+    if (addErrors.length > 0) {
+      throw new Error(`orderEditAddVariant: ${addErrors.map((e) => e.message).join(", ")}`);
+    }
+    lineItemId = addData.orderEditAddVariant.calculatedLineItem?.id ?? null;
+
+    // Step 2b: Override price if the Shopify variant price differs from our upsell price
+    const shopifyPrice = item.shopifyVariantPrice ?? null;
+    const discountAmount = shopifyPrice !== null ? shopifyPrice - item.price : 0;
+    if (lineItemId && discountAmount > 0) {
+      const discountData = await shopifyGraphQL<{
+        orderEditSetLineItemDiscount: {
+          userErrors: Array<{ field: string[]; message: string }>;
+        };
+      }>(
+        `mutation SetDiscount($id: ID!, $lineItemId: ID!, $discount: OrderEditAppliedDiscountInput!) {
+          orderEditSetLineItemDiscount(id: $id, lineItemId: $lineItemId, discount: $discount) {
+            calculatedLineItem { id }
+            userErrors { field message }
+          }
+        }`,
+        {
+          id: calcId,
+          lineItemId,
+          discount: {
+            description: "Precio upsell post-compra",
+            fixedValue: { amount: discountAmount.toFixed(2), currencyCode: "COP" },
+          },
+        }
+      );
+      const discountErrors = discountData.orderEditSetLineItemDiscount.userErrors;
+      if (discountErrors.length > 0) {
+        // Non-fatal: product is still added, just at Shopify price
+        console.warn(`[Shopify] Discount warning: ${discountErrors.map((e) => e.message).join(", ")}`);
+      }
+    }
+  } else {
+    // Step 2 fallback: custom item (no inventory link) with exact price
+    const addData = await shopifyGraphQL<{
+      orderEditAddCustomItem: {
+        calculatedLineItem: { id: string } | null;
+        userErrors: Array<{ field: string[]; message: string }>;
+      };
+    }>(
+      `mutation AddCustom($id: ID!, $title: String!, $price: MoneyInput!, $qty: Int!) {
+        orderEditAddCustomItem(id: $id, title: $title, price: $price, quantity: $qty, requiresShipping: true) {
+          calculatedLineItem { id }
+          userErrors { field message }
+        }
+      }`,
+      {
+        id: calcId,
+        title,
+        price: { amount: item.price.toFixed(2), currencyCode: "COP" },
+        qty: item.quantity,
+      }
+    );
+
+    const addErrors = addData.orderEditAddCustomItem.userErrors;
+    if (addErrors.length > 0) {
+      throw new Error(`orderEditAddCustomItem: ${addErrors.map((e) => e.message).join(", ")}`);
+    }
   }
 
   // Step 3: Commit the edit
