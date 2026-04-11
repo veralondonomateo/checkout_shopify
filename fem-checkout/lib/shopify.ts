@@ -236,7 +236,7 @@ export async function createShopifyOrder(
         kind: "sale",
         status: "success",
         amount: input.total.toFixed(2),
-        gateway: "mercadopago",
+        gateway: "pago anticipado",
       },
     ];
   } else {
