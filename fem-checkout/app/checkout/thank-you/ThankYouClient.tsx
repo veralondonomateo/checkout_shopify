@@ -137,11 +137,22 @@ export default function ThankYouClient() {
         const parsed: StoredOrder = JSON.parse(raw);
         setOrder(parsed);
         // Purchase pixel (navegador) — se deduplica con CAPI por event_id
-        if (orderId && !isFailure && !isPending && typeof window !== "undefined" && (window as any).fbq) {
-          (window as any).fbq("track", "Purchase", {
-            value: parsed.total,
-            currency: "COP",
-          }, { eventID: `purchase_${orderId}` });
+        if (orderId && !isFailure && !isPending && typeof window !== "undefined") {
+          if ((window as any).fbq) {
+            (window as any).fbq("track", "Purchase", {
+              value: parsed.total,
+              currency: "COP",
+            }, { eventID: `purchase_${orderId}` });
+          }
+          if ((window as any).ttq) {
+            (window as any).ttq.track("CompletePayment", {
+              content_id: orderId,
+              content_type: "product",
+              currency: "COP",
+              value: parsed.total,
+              quantity: parsed.items.reduce((sum: number, i: OrderItem) => sum + i.quantity, 0),
+            });
+          }
         }
       } catch {}
     }

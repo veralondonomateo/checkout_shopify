@@ -99,8 +99,9 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
 
   // Disparar InitiateCheckout al cargar la página
   useEffect(() => {
-    if (typeof window !== "undefined" && (window as any).fbq) {
-      (window as any).fbq("track", "InitiateCheckout");
+    if (typeof window !== "undefined") {
+      if ((window as any).fbq) (window as any).fbq("track", "InitiateCheckout");
+      if ((window as any).ttq) (window as any).ttq.track("InitiateCheckout");
     }
   }, []);
 
