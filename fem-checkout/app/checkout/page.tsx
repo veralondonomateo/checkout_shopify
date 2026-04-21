@@ -44,11 +44,17 @@ export default async function CheckoutPage({
     allProducts.find((p) => p.handle.includes("jabon") && p.handle.includes("intimo")) ??
     findByTitle(/jab[oó]n\s*[ií]ntimo/i);
 
+  // SKU 117701 = "Óvulos vaginales Fem x 6 UND" (producto individual, no combo)
   const ovulosProduct =
-    allProducts.find((p) => p.handle === "ovulos-fem") ??
-    allProducts.find((p) => p.handle.includes("ovulo")) ??
+    allProducts.find((p) => p.variants.some((v) => v.sku === "117701")) ??
+    findByTitle(/[oó]vulos\s*vaginales\s*fem\s*x\s*6/i) ??
     findByTitle(/[oó]vulos\s*vaginales/i) ??
-    findByTitle(/[oó]vulos/i);
+    allProducts.find(
+      (p) =>
+        /[oó]vulos/i.test(p.title) &&
+        !/jab[oó]n/i.test(p.title) &&
+        !/combo/i.test(p.title)
+    );
 
   return (
     <Suspense>

@@ -92,6 +92,7 @@ export interface ShopifyVariant {
   id: number;
   title: string;
   price: string;
+  sku: string;
   inventory_quantity: number;
 }
 
