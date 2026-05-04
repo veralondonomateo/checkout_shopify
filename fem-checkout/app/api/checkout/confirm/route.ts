@@ -1,22 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-
-type DBPaymentStatus = "pending" | "approved" | "failure" | "in_process";
-
-function mapMPStatus(mpStatus: string): DBPaymentStatus {
-  switch (mpStatus) {
-    case "approved":
-      return "approved";
-    case "rejected":
-    case "cancelled":
-      return "failure";
-    case "in_process":
-    case "authorized":
-      return "in_process";
-    default:
-      return "pending";
-  }
-}
+import { mapMPStatus, type DBPaymentStatus } from "@/lib/mp";
 
 // Fallback del redirect de MP — verifica el estado real del pago en la API de MP
 // (no confiamos en el ?status= de la URL que puede ser manipulado)
@@ -62,18 +46,24 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createServerClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("orders")
     .update({
       payment_status: status,
       mp_payment_id: payment_id,
     })
     .eq("id", order_id)
-    .eq("payment_method", "mercadopago");
+    .eq("payment_method", "mercadopago")
+    .select("id");
 
   if (error) {
     console.error("[Confirm] Error actualizando orden:", error);
     return NextResponse.json({ error: "DB error" }, { status: 500 });
+  }
+
+  if (!updated || updated.length === 0) {
+    console.warn("[Confirm] Orden no encontrada:", order_id);
+    return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
   }
 
   // La orden en Shopify la crea exclusivamente el webhook de MP

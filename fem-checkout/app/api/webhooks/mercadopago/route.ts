@@ -3,26 +3,11 @@ import { createHmac } from "crypto";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
 import { sendPurchaseEvent } from "@/lib/meta";
+import { mapMPStatus } from "@/lib/mp";
 
-type DBPaymentStatus = "pending" | "approved" | "failure" | "in_process";
+const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutos
 
-// Mapear estados de MP a nuestro enum
-function mapMPStatus(mpStatus: string): DBPaymentStatus {
-  switch (mpStatus) {
-    case "approved":
-      return "approved";
-    case "rejected":
-    case "cancelled":
-      return "failure";
-    case "in_process":
-    case "authorized":
-      return "in_process";
-    default:
-      return "pending";
-  }
-}
-
-// Validar la firma x-Signature que envía MP
+// Validar la firma x-Signature que envía MP y que el timestamp sea reciente
 function isValidSignature(
   secret: string,
   dataId: string,
@@ -30,6 +15,11 @@ function isValidSignature(
   ts: string,
   v1: string
 ): boolean {
+  // Rechazar webhooks con timestamp mayor a 5 minutos (protección anti-replay)
+  const tsMs = parseInt(ts, 10) * 1000;
+  if (isNaN(tsMs) || Date.now() - tsMs > WEBHOOK_MAX_AGE_MS) {
+    return false;
+  }
   // Plantilla firmada según docs de MP:
   // "id:{dataId};request-id:{requestId};ts:{ts};"
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;

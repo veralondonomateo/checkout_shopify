@@ -40,6 +40,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
+  if (!body.items || body.items.length === 0) {
+    return NextResponse.json({ error: "La orden no tiene productos" }, { status: 400 });
+  }
+
+  if (!["mercadopago", "contraentrega"].includes(body.paymentMethod)) {
+    return NextResponse.json({ error: "Método de pago inválido" }, { status: 400 });
+  }
+
   // ── 1. Insertar la orden (siempre, antes de cualquier redirect) ──────────
   const { data: order, error: insertError } = await supabase
     .from("orders")

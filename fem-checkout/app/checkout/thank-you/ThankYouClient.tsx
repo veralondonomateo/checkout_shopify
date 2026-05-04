@@ -508,7 +508,7 @@ export default function ThankYouClient() {
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs text-gray-400 mb-3">¿Tienes dudas sobre tu pedido?</p>
                 <a
-                  href="https://wa.me/573000000000"
+                  href="https://wa.me/573136272001"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#25D366] text-white text-sm font-semibold rounded-md hover:bg-[#1ebe5d] transition-colors"
