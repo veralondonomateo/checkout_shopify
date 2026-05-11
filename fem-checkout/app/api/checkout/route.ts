@@ -130,23 +130,40 @@ export async function POST(req: NextRequest) {
   try {
     const preference = new Preference(client);
 
+    const mpItems = body.items.map((item) => ({
+      id: item.id,
+      title: item.variant ? `${item.name} – ${item.variant}` : item.name,
+      description: item.variant ? `${item.name} – ${item.variant}` : item.name,
+      category_id: "health_and_beauty",
+      quantity: item.quantity,
+      unit_price: item.price,
+      currency_id: "COP",
+      picture_url: item.image,
+    }));
+
+    // Apply discount as a line item so MP totals match exactly
+    if (body.couponCode && body.discount && body.discount > 0) {
+      mpItems.push({
+        id: "discount",
+        title: `Descuento ${body.couponCode}`,
+        description: `Descuento ${body.couponCode}`,
+        category_id: "health_and_beauty",
+        quantity: 1,
+        unit_price: -body.discount,
+        currency_id: "COP",
+        picture_url: "",
+      });
+    }
+
     const result = await preference.create({
       body: {
-        items: body.items.map((item) => ({
-          id: item.id,
-          title: item.variant ? `${item.name} – ${item.variant}` : item.name,
-          description: item.variant ? `${item.name} – ${item.variant}` : item.name,
-          category_id: "health_and_beauty",
-          quantity: item.quantity,
-          unit_price: item.price,
-          currency_id: "COP",
-          picture_url: item.image,
-        })),
+        items: mpItems,
         payer: {
           name: body.firstName,
           surname: body.lastName,
           email: body.email,
-          phone: { number: body.phone },
+          // area_code is required by MP Colombia — without it payment validation fails
+          phone: { area_code: "57", number: body.phone },
           address: {
             street_name: body.address,
           },
@@ -160,19 +177,10 @@ export async function POST(req: NextRequest) {
           failure: `${APP_URL}/checkout/thank-you?status=failure&order_id=${orderId}`,
           pending: `${APP_URL}/checkout/thank-you?status=pending&order_id=${orderId}`,
         },
+        notification_url: `${APP_URL}/api/webhooks/mercadopago`,
         auto_return: "approved",
         statement_descriptor: "FEM SUPLEMENTOS",
         external_reference: orderId,
-        ...(body.couponCode && body.discount && body.discount > 0
-          ? {
-              discounts: [
-                {
-                  name: body.couponCode,
-                  amount: body.discount,
-                },
-              ],
-            }
-          : {}),
       },
     });
 
