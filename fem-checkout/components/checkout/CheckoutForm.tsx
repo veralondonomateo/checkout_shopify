@@ -33,10 +33,10 @@ const schema = z.object({
   phone: z
     .string()
     .refine(
-      (v) => /^\d{10}$/.test(v.replace(/[\s\-]/g, "")),
-      "Ingresa los 10 dígitos de tu celular"
+      (v) => /^\d{10}$/.test(v.replace(/\D/g, "")),
+      "Tu número es incorrecto"
     )
-    .transform((v) => v.replace(/[\s\-]/g, "")),
+    .transform((v) => v.replace(/\D/g, "")),
   paymentMethod: z
     .enum(["mercadopago", "contraentrega"] as const)
     .refine((v) => v !== undefined, { message: "Selecciona un método de pago" }),
