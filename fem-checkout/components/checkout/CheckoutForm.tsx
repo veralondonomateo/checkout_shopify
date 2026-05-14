@@ -22,9 +22,9 @@ const schema = z.object({
       (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
       "Ingresa un email válido"
     ),
-  firstName: z.string().min(2, "Ingresa tu nombre"),
-  lastName: z.string().min(2, "Ingresa tu apellido"),
-  cedula: z.string().optional(),
+  firstName: z.string().min(2, "Ingresa tu nombre").regex(/^[a-zA-ZáéíóúüÁÉÍÓÚÜ\s\-']+$/, "Solo letras, sin ñ ni caracteres especiales"),
+  lastName: z.string().min(2, "Ingresa tu apellido").regex(/^[a-zA-ZáéíóúüÁÉÍÓÚÜ\s\-']+$/, "Solo letras, sin ñ ni caracteres especiales"),
+  cedula: z.string().regex(/^\d*$/, "Solo se permiten números").optional(),
   address: z.string().min(5, "Ingresa una dirección válida"),
   complement: z.string().optional(),
   state: z.string().min(1, "Selecciona un departamento"),

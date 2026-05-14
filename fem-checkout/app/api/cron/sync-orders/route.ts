@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
+import { sendAlert } from "@/lib/alert";
 
 /**
  * Safety-net cron: finds every approved order (contraentrega + paid MP)
@@ -24,9 +25,10 @@ export async function GET(req: NextRequest) {
 
   const { data: orphans, error } = await supabase
     .from("orders")
-    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, payment_method")
+    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, payment_method, shopify_error")
     .eq("payment_status", "approved")
     .is("shopify_order_id", null)
+    .not("shopify_error", "ilike", "PERMANENT:%")
     .lt("created_at", cutoff);
 
   if (error) {
@@ -83,23 +85,50 @@ export async function GET(req: NextRequest) {
         femOrderId: order.id,
       });
 
-      await supabase
+      // Atomic claim: only update if no other process beat us (race-condition guard)
+      const { data: claimed } = await supabase
         .from("orders")
         .update({ shopify_order_id: shopifyId, shopify_error: null })
-        .eq("id", order.id);
+        .eq("id", order.id)
+        .is("shopify_order_id", null)
+        .select("id")
+        .maybeSingle();
+
+      if (!claimed) {
+        const alertMsg = `[Cron] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${order.id} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+        console.error(alertMsg);
+        sendAlert(alertMsg).catch(() => {});
+        results.push({ id: order.id, status: "ok", detail: "already_synced_race" });
+        continue;
+      }
 
       console.log(`[Cron] Recovered order ${order.id} → Shopify #${shopifyId}`);
       results.push({ id: order.id, status: "ok", detail: String(shopifyId) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Cron] Failed to recover order ${order.id}:`, msg);
-      await supabase.from("orders").update({ shopify_error: msg }).eq("id", order.id);
-      results.push({ id: order.id, status: "error", detail: msg });
+      // 422 = Shopify validation error (bad data) → permanent failure, don't retry
+      const isPermanent = msg.includes("Shopify API 422");
+      const storedError = isPermanent ? `PERMANENT: ${msg}` : msg;
+      await supabase.from("orders").update({ shopify_error: storedError }).eq("id", order.id);
+      results.push({ id: order.id, status: isPermanent ? "ok" : "error", detail: isPermanent ? "permanent_data_error" : msg });
     }
   }
 
   const ok = results.filter((r) => r.status === "ok").length;
   const failed = results.filter((r) => r.status === "error").length;
+  const rescued = results.filter((r) => r.status === "ok" && !["already_synced", "already_synced_race"].includes(r.detail ?? ""));
+
+  // Alert on every rescue — means a webhook failed silently
+  if (rescued.length > 0) {
+    const ids = rescued.map((r) => r.id).join(", ");
+    sendAlert(`[Cron] Rescató ${rescued.length} orden(es) huérfana(s) (webhook fallido): ${ids}`).catch(() => {});
+  }
+
+  if (failed > 0) {
+    const failedIds = results.filter((r) => r.status === "error").map((r) => `${r.id}: ${r.detail}`).join(" | ");
+    sendAlert(`[Cron] ${failed} orden(es) fallaron al sincronizar con Shopify: ${failedIds}`).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, processed: orphans.length, synced: ok, failed, results });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue } from "react-hook-form";
+import { UseFormRegister, UseFormRegisterReturn, FieldErrors, UseFormWatch, UseFormSetValue } from "react-hook-form";
 import { useMemo } from "react";
 import { CheckoutFormData } from "@/types/checkout";
 import Input from "@/components/ui/Input";
@@ -12,6 +12,25 @@ interface DeliverySectionProps {
   errors: FieldErrors<CheckoutFormData>;
   watch: UseFormWatch<CheckoutFormData>;
   setValue: UseFormSetValue<CheckoutFormData>;
+}
+
+// Strip characters not allowed in each field type
+const onlyDigits = (v: string) => v.replace(/\D/g, "");
+const onlyLetters = (v: string) => v.replace(/[^a-zA-ZáéíóúüÁÉÍÓÚÜ\s\-']/g, "");
+const onlyAddress = (v: string) => v.replace(/[^a-zA-ZáéíóúüÁÉÍÓÚÜ0-9\s#\-.,°]/g, "");
+
+function sanitizedRegister(
+  reg: UseFormRegisterReturn,
+  sanitize: (v: string) => string
+) {
+  const { onChange, ...rest } = reg;
+  return {
+    ...rest,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.target.value = sanitize(e.target.value);
+      return onChange(e);
+    },
+  };
 }
 
 export default function DeliverySection({ register, errors, watch, setValue }: DeliverySectionProps) {
@@ -59,7 +78,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
             placeholder="Ana"
             autoComplete="given-name"
             error={errors.firstName?.message}
-            {...register("firstName")}
+            {...sanitizedRegister(register("firstName"), onlyLetters)}
           />
           <Input
             label="Apellido"
@@ -67,7 +86,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
             placeholder="García"
             autoComplete="family-name"
             error={errors.lastName?.message}
-            {...register("lastName")}
+            {...sanitizedRegister(register("lastName"), onlyLetters)}
           />
         </div>
 
@@ -80,7 +99,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
             optional
             inputMode="numeric"
             error={errors.cedula?.message}
-            {...register("cedula")}
+            {...sanitizedRegister(register("cedula"), onlyDigits)}
           />
           <Input
             label="Número de WhatsApp"
@@ -105,7 +124,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
           placeholder="Calle 123 # 45-67"
           autoComplete="street-address"
           error={errors.address?.message}
-          {...register("address")}
+          {...sanitizedRegister(register("address"), onlyAddress)}
         />
 
         {/* Complement */}
@@ -115,7 +134,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
           placeholder="Apto 301, Casa, Torre..."
           optional
           error={errors.complement?.message}
-          {...register("complement")}
+          {...sanitizedRegister(register("complement"), onlyAddress)}
         />
 
         {/* State & City */}

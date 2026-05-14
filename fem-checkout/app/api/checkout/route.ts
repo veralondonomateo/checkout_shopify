@@ -48,6 +48,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Método de pago inválido" }, { status: 400 });
   }
 
+  // Validate totals server-side — never trust client-sent numbers
+  const discount = body.discount ?? 0;
+  const expectedTotal = body.subtotal + body.shipping - discount;
+  if (body.total <= 0) {
+    return NextResponse.json({ error: "El total debe ser mayor a cero" }, { status: 400 });
+  }
+  if (Math.round(expectedTotal) !== Math.round(body.total)) {
+    console.warn(`[Checkout] Total mismatch: expected ${expectedTotal}, got ${body.total}`);
+    return NextResponse.json({ error: "Total inconsistente" }, { status: 400 });
+  }
+  if (discount > 0 && discount >= body.subtotal) {
+    return NextResponse.json({ error: "El descuento no puede ser mayor o igual al subtotal" }, { status: 400 });
+  }
+
   // ── 1. Insertar la orden (siempre, antes de cualquier redirect) ──────────
   const { data: order, error: insertError } = await supabase
     .from("orders")

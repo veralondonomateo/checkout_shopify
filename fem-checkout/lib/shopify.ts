@@ -1,3 +1,16 @@
+// ── Data sanitizers ────────────────────────────────────────────────────────────────────
+function stripEmojis(str: string): string {
+  // Remove emoji and variation-selector characters, then trim
+  return str
+    .replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]/gu, "")
+    .trim();
+}
+
+function sanitizeEmail(email: string): string {
+  // Trim whitespace and collapse internal spaces (common typo on mobile)
+  return email.trim().toLowerCase().replace(/\s+/g, "");
+}
+
 // ── Auth: prefer static SHOPIFY_ACCESS_TOKEN, fall back to OAuth client_credentials ──
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
@@ -12,23 +25,24 @@ async function getAccessToken(): Promise<string> {
   if (tokenCache && tokenCache.expiresAt > now + 60_000) {
     return tokenCache.token;
   }
-  const res = await fetch(
-    `https://${process.env.SHOPIFY_DOMAIN}/admin/oauth/access_token`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: process.env.SHOPIFY_CLIENT_ID!,
-        client_secret: process.env.SHOPIFY_CLIENT_SECRET!,
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Shopify token error: ${res.status}`);
-  const data = await res.json();
+  const oauthUrl = `https://${process.env.SHOPIFY_DOMAIN}/admin/oauth/access_token`;
+  console.log(`[Shopify Auth] Requesting token from ${oauthUrl} with client_id=${process.env.SHOPIFY_CLIENT_ID?.slice(0, 8)}...`);
+  const res = await fetch(oauthUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: process.env.SHOPIFY_CLIENT_ID!,
+      client_secret: process.env.SHOPIFY_CLIENT_SECRET!,
+    }),
+  });
+  const responseText = await res.text();
+  console.log(`[Shopify Auth] OAuth response ${res.status}: ${responseText.slice(0, 300)}`);
+  if (!res.ok) throw new Error(`Shopify token error ${res.status}: ${responseText.slice(0, 200)}`);
+  const data = JSON.parse(responseText);
   tokenCache = {
     token: data.access_token,
-    expiresAt: now + (data.expires_in - 300) * 1000,
+    expiresAt: now + ((data.expires_in ?? 3600) - 300) * 1000,
   };
   return tokenCache.token;
 }
@@ -182,8 +196,17 @@ export async function createShopifyOrder(
 ): Promise<number> {
   const isPaid = input.paymentMethod === "mercadopago";
 
+  // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
+  const cleanEmail = sanitizeEmail(input.email);
+  const cleanFirst = stripEmojis(input.firstName);
+  const cleanLast = stripEmojis(input.lastName);
+  const cleanAddress = stripEmojis(input.address);
+  const cleanComplement = input.complement ? stripEmojis(input.complement) : "";
+  const cleanCity = stripEmojis(input.city);
+  const cleanState = stripEmojis(input.state);
+
   const orderBody: Record<string, unknown> = {
-    email: input.email,
+    email: cleanEmail,
     financial_status: isPaid ? "paid" : "pending",
     currency: "COP",
     suppress_notifications: true,
@@ -196,17 +219,17 @@ export async function createShopifyOrder(
       if (item.shopifyVariantId) {
         base.variant_id = item.shopifyVariantId;
       } else {
-        base.title = item.variant ? `${item.name} – ${item.variant}` : item.name;
+        base.title = item.variant ? `${stripEmojis(item.name)} – ${stripEmojis(item.variant)}` : stripEmojis(item.name);
       }
       return base;
     }),
     shipping_address: {
-      first_name: input.firstName,
-      last_name: input.lastName,
-      address1: input.address,
-      address2: input.complement ?? "",
-      city: input.city,
-      province: input.state,
+      first_name: cleanFirst,
+      last_name: cleanLast,
+      address1: cleanAddress,
+      address2: cleanComplement,
+      city: cleanCity,
+      province: cleanState,
       country_code: "CO",
       phone: `+57${input.phone.replace(/\D/g, "")}`,
     },

@@ -4,6 +4,7 @@ import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
 import { sendPurchaseEvent } from "@/lib/meta";
 import { mapMPStatus } from "@/lib/mp";
+import { sendAlert } from "@/lib/alert";
 
 const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -161,10 +162,21 @@ export async function POST(req: NextRequest) {
             mpPaymentId: paymentId,
             femOrderId: orderId,
           });
-          await supabase
+
+          // Atomic update: only claim the row if no other process beat us to it
+          const { data: claimed } = await supabase
             .from("orders")
-            .update({ shopify_order_id: shopifyId })
-            .eq("id", orderId);
+            .update({ shopify_order_id: shopifyId, shopify_error: null })
+            .eq("id", orderId)
+            .is("shopify_order_id", null)
+            .select("id")
+            .maybeSingle();
+
+          if (!claimed) {
+            const alertMsg = `[MP Webhook] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${orderId} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+            console.error(alertMsg);
+            sendAlert(alertMsg).catch(() => {});
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error("[MP Webhook] Error creando orden Shopify:", msg);
