@@ -48,6 +48,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Método de pago inválido" }, { status: 400 });
   }
 
+  // Ciudades de difícil acceso: solo pago anticipado
+  if (body.paymentMethod === "contraentrega" && body.state === "Vichada" && body.city === "Puerto Carreño") {
+    return NextResponse.json({ error: "Pago contra entrega no disponible para Puerto Carreño" }, { status: 400 });
+  }
+
   // Validate totals server-side — never trust client-sent numbers
   const discount = body.discount ?? 0;
   const expectedTotal = body.subtotal + body.shipping - discount;

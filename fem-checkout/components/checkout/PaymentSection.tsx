@@ -1,16 +1,30 @@
 "use client";
 
-import { UseFormRegister, FieldErrors, UseFormWatch } from "react-hook-form";
+import { useEffect } from "react";
+import { useWatch, UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue, Control } from "react-hook-form";
 import { CheckoutFormData } from "@/types/checkout";
 
 interface PaymentSectionProps {
   register: UseFormRegister<CheckoutFormData>;
   errors: FieldErrors<CheckoutFormData>;
   watch: UseFormWatch<CheckoutFormData>;
+  control: Control<CheckoutFormData>;
+  setValue: UseFormSetValue<CheckoutFormData>;
 }
 
-export default function PaymentSection({ register, errors, watch }: PaymentSectionProps) {
+export default function PaymentSection({ register, errors, watch, control, setValue }: PaymentSectionProps) {
   const selectedMethod = watch("paymentMethod");
+
+  // useWatch creates proper React subscriptions in THIS component (not just in the useForm owner)
+  const watchedState = useWatch({ control, name: "state" });
+  const watchedCity = useWatch({ control, name: "city" });
+  const isRestrictedCity = watchedState === "Vichada" && watchedCity === "Puerto Carreño";
+
+  useEffect(() => {
+    if (isRestrictedCity && selectedMethod === "contraentrega") {
+      setValue("paymentMethod", "mercadopago");
+    }
+  }, [isRestrictedCity, selectedMethod, setValue]);
 
   const methods = [
     {
@@ -64,6 +78,17 @@ export default function PaymentSection({ register, errors, watch }: PaymentSecti
         <h2 className="font-semibold text-gray-900">Método de pago</h2>
       </div>
 
+      {isRestrictedCity && (
+        <div className="mb-4 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
+          <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-amber-800 leading-relaxed">
+            <span className="font-semibold">Por la distancia a tu ciudad</span>, el pago contra entrega no está disponible para Puerto Carreño. Puedes completar tu pedido pagando de forma anticipada — ¡te lo enviamos igual con todo el amor! 💛
+          </p>
+        </div>
+      )}
+
       {errors.paymentMethod && (
         <p className="text-xs text-red-500 mb-3 flex items-center gap-1">
           <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
@@ -75,16 +100,19 @@ export default function PaymentSection({ register, errors, watch }: PaymentSecti
 
       <div className="space-y-2.5">
         {methods.map((method) => {
-          const isSelected = selectedMethod === method.id;
+          const isDisabled = isRestrictedCity && method.id === "contraentrega";
+          const isSelected = selectedMethod === method.id && !isDisabled;
           return (
             <label
               key={method.id}
               className={`
-                relative flex items-start gap-4 p-4 rounded-md border cursor-pointer
+                relative flex items-start gap-4 p-4 rounded-md border
                 transition-colors duration-150
-                ${isSelected
-                  ? "border-[#fc5245] bg-white"
-                  : "border-gray-200 bg-white hover:border-gray-300"
+                ${isDisabled
+                  ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed pointer-events-none select-none"
+                  : isSelected
+                    ? "border-[#fc5245] bg-white cursor-pointer"
+                    : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
                 }
               `}
             >
@@ -92,6 +120,7 @@ export default function PaymentSection({ register, errors, watch }: PaymentSecti
                 type="radio"
                 value={method.id}
                 className="sr-only"
+                disabled={isDisabled}
                 {...register("paymentMethod")}
               />
 

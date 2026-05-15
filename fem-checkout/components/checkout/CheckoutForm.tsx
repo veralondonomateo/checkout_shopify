@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { OrderItem } from "@/types/checkout";
 import { UpsellProduct } from "./UpsellSection";
 import ContactSection from "./ContactSection";
@@ -18,8 +18,9 @@ const schema = z.object({
   email: z
     .string()
     .min(1, "Este campo es obligatorio")
+    .transform((v) => v.trim())
     .refine(
-      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
+      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
       "Ingresa un email válido"
     ),
   firstName: z.string().min(2, "Ingresa tu nombre").regex(/^[a-zA-ZáéíóúüÁÉÍÓÚÜ\s\-']+$/, "Solo letras, sin ñ ni caracteres especiales"),
@@ -34,7 +35,7 @@ const schema = z.object({
     .string()
     .refine(
       (v) => /^\d{10}$/.test(v.replace(/\D/g, "")),
-      "Tu número es incorrecto"
+      "Ingresa los 10 dígitos de tu celular (sin código de país)"
     )
     .transform((v) => v.replace(/\D/g, "")),
   paymentMethod: z
@@ -85,6 +86,7 @@ export default function CheckoutForm({
     handleSubmit,
     watch,
     setValue,
+    control,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -93,6 +95,7 @@ export default function CheckoutForm({
       paymentMethod: "mercadopago",
     },
   });
+
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
@@ -154,7 +157,7 @@ export default function CheckoutForm({
         onToggle={onUpsellToggle}
       />
 
-      <PaymentSection register={register} errors={errors} watch={watch} />
+      <PaymentSection register={register} errors={errors} watch={watch} control={control} setValue={setValue} />
 
       {/* Coupon — mobile only, hidden behind toggle to avoid code-hunting */}
       <div className="lg:hidden">

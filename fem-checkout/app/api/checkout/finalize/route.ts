@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
+import { sendAlert } from "@/lib/alert";
 
 // Crea la orden en Shopify para pedidos contraentrega, llamado desde el
 // thank-you page tras la ventana de upsell (90 s o al cerrar la pestaña).
@@ -67,10 +68,20 @@ export async function POST(req: NextRequest) {
       femOrderId: order_id,
     });
 
-    await supabase
+    // Atomic claim: only update if no other process beat us (race-condition guard)
+    const { data: claimed } = await supabase
       .from("orders")
       .update({ shopify_order_id: shopifyId, shopify_error: null })
-      .eq("id", order_id);
+      .eq("id", order_id)
+      .is("shopify_order_id", null)
+      .select("id")
+      .maybeSingle();
+
+    if (!claimed) {
+      const alertMsg = `[Finalize] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${order_id} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+      console.error(alertMsg);
+      sendAlert(alertMsg).catch(() => {});
+    }
 
     console.log(`[Finalize] Orden Shopify #${shopifyId} creada para ${order_id}`);
     return NextResponse.json({ ok: true, shopify_order_id: shopifyId });

@@ -105,7 +105,7 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
             label="Número de WhatsApp"
             type="tel"
             placeholder="3001234567"
-            autoComplete="tel"
+            autoComplete="tel-national"
             inputMode="numeric"
             icon={
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

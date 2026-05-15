@@ -76,6 +76,7 @@ const SHIPPING = 15000;
 // Valid codes → discount rate
 const COUPON_CODES: Record<string, number> = {
   FEM10: 0.1,
+  MISTERIOSO: 0.05,
 };
 
 interface CheckoutPageClientProps {
