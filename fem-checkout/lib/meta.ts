@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 
 const PIXEL_ID = process.env.META_PIXEL_ID!;
 const ACCESS_TOKEN = process.env.META_CONVERSIONS_TOKEN!;
-const API_VERSION = "v19.0";
+const API_VERSION = "v22.0";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
