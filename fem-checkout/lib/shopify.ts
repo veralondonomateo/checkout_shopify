@@ -197,7 +197,10 @@ export async function createShopifyOrder(
   const isPaid = input.paymentMethod === "mercadopago";
 
   // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
-  const cleanEmail = sanitizeEmail(input.email);
+  const sanitized = sanitizeEmail(input.email);
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized);
+  // Some old orders have phone numbers stored as email — use a synthetic address as fallback
+  const cleanEmail = isValidEmail ? sanitized : `pedido-${input.femOrderId.slice(0, 8)}@checkoutfem.com`;
   const cleanFirst = stripEmojis(input.firstName);
   const cleanLast = stripEmojis(input.lastName);
   const cleanAddress = stripEmojis(input.address);

@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
   // Orders approved >10 min ago with no Shopify order yet
   const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
+  // NULL-safe: `NOT ILIKE` in PostgreSQL returns NULL (not TRUE) for NULL values,
+  // so orders with shopify_error=null would be silently excluded. Use OR to include them.
   const { data: orphans, error } = await supabase
     .from("orders")
     .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, payment_method, shopify_error")
     .eq("payment_status", "approved")
     .is("shopify_order_id", null)
-    .not("shopify_error", "ilike", "PERMANENT:%")
+    .or("shopify_error.is.null,shopify_error.not.ilike.PERMANENT:%")
     .lt("created_at", cutoff);
 
   if (error) {
