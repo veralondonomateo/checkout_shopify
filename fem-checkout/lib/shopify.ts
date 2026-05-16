@@ -1,8 +1,9 @@
 // ── Data sanitizers ────────────────────────────────────────────────────────────────────
 function stripEmojis(str: string): string {
-  // Remove emoji and variation-selector characters, then trim
+  // Extended_Pictographic covers all emoji-capable symbols (incl. geometric shapes like ▪ U+25AA)
   return str
-    .replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]/gu, "")
+    .replace(/\p{Extended_Pictographic}[\u{FE00}-\u{FE0F}]?/gu, "")
+    .replace(/[\u{FE00}-\u{FE0F}\u{200D}]/gu, "")
     .trim();
 }
 
@@ -198,8 +199,12 @@ export async function createShopifyOrder(
 
   // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
   const sanitized = sanitizeEmail(input.email);
-  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sanitized);
-  // Some old orders have phone numbers stored as email — use a synthetic address as fallback
+  // Stricter than the naive /[^\s@]+/ pattern: TLD must be letters-only, no trailing/double dots
+  const isValidEmail =
+    !sanitized.endsWith(".") &&
+    !sanitized.includes("..") &&
+    /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(sanitized);
+  // Some old orders have phone numbers/malformed addresses stored as email — use synthetic fallback
   const cleanEmail = isValidEmail ? sanitized : `pedido-${input.femOrderId.slice(0, 8)}@checkoutfem.com`;
   const cleanFirst = stripEmojis(input.firstName);
   const cleanLast = stripEmojis(input.lastName);
