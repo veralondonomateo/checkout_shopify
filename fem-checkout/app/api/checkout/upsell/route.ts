@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { findProductByTitle, addLineItemToShopifyOrder } from "@/lib/shopify";
+import { findProductBySku, findProductByTitle, addLineItemToShopifyOrder } from "@/lib/shopify";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
@@ -39,15 +39,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, already: true });
   }
 
-  // Obtener shopify_variant_id y precio actual del jabón en Shopify
+  // Obtener shopify_variant_id y precio actual del jabón en Shopify (SKU 117700)
+  // El combo "probiótico óvulos y jabón" puede compartir este SKU, así que
+  // excluimos explícitamente productos que sean combos o contengan "óvulos".
   let shopifyVariantId: number | null = null;
   let shopifyVariantPrice: number | null = null;
   try {
-    const jabonShopify = await findProductByTitle(/jab[oó]n\s*[ií]ntimo/i);
-    if (jabonShopify) {
-      shopifyVariantId = jabonShopify.variants[0]?.id ?? null;
-      shopifyVariantPrice = parseFloat(jabonShopify.variants[0]?.price ?? "0") || null;
-      console.log(`[Upsell] Jabón encontrado: ${jabonShopify.title} — precio Shopify: ${shopifyVariantPrice}`);
+    const bySkuResult = await findProductBySku("117700");
+    const isCombo =
+      bySkuResult !== null &&
+      (/combo/i.test(bySkuResult.product.title) ||
+        /[oó]vulos/i.test(bySkuResult.product.title));
+
+    if (bySkuResult && !isCombo) {
+      shopifyVariantId = bySkuResult.variant.id;
+      shopifyVariantPrice = parseFloat(bySkuResult.variant.price) || null;
+      console.log(`[Upsell] Jabón encontrado por SKU: ${bySkuResult.product.title} — precio Shopify: ${shopifyVariantPrice}`);
+    } else {
+      // El SKU apunta a un combo — buscar el jabón íntimo solo por nombre exacto
+      const jabonByTitle = await findProductByTitle(/jab[oó]n\s*[ií]ntimo.*pH\s*neutro/i);
+      if (jabonByTitle && !/combo/i.test(jabonByTitle.title)) {
+        const variant =
+          jabonByTitle.variants.find((v) => v.sku === "117700") ??
+          jabonByTitle.variants[0];
+        if (variant) {
+          shopifyVariantId = variant.id;
+          shopifyVariantPrice = parseFloat(variant.price) || null;
+          console.log(`[Upsell] Jabón encontrado por título: ${jabonByTitle.title} — precio Shopify: ${shopifyVariantPrice}`);
+        }
+      }
     }
   } catch (err) {
     console.error("[Upsell] Error buscando jabón en Shopify:", err);

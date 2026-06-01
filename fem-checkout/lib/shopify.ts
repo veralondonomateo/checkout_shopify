@@ -142,6 +142,18 @@ export async function findProductByTitle(
   return products.find((p) => pattern.test(p.title)) ?? null;
 }
 
+/** Find the product and exact variant that has the given SKU */
+export async function findProductBySku(
+  sku: string
+): Promise<{ product: ShopifyProduct; variant: ShopifyVariant } | null> {
+  const products = await getCachedProducts();
+  for (const product of products) {
+    const variant = product.variants.find((v) => v.sku === sku);
+    if (variant) return { product, variant };
+  }
+  return null;
+}
+
 // ── Product queries ────────────────────────────────────────────────────────────
 export async function getProducts(): Promise<ShopifyProduct[]> {
   const data = await shopifyFetch<{ products: ShopifyProduct[] }>(

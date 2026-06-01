@@ -134,6 +134,40 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (order && !order.shopify_order_id) {
+        // Pre-claim: previene que dos webhooks concurrentes ambos creen una orden en Shopify.
+        if (order.shopify_error === "PROCESSING") {
+          console.log(`[MP Webhook] Orden ${orderId} ya siendo procesada — saliendo`);
+          return NextResponse.json({ ok: true });
+        }
+
+        let preclaimOk = false;
+        if (order.shopify_error === null) {
+          const { data: pc } = await supabase
+            .from("orders")
+            .update({ shopify_error: "PROCESSING" })
+            .eq("id", orderId)
+            .is("shopify_order_id", null)
+            .is("shopify_error", null)
+            .select("id")
+            .maybeSingle();
+          preclaimOk = !!pc;
+        } else {
+          const { data: pc } = await supabase
+            .from("orders")
+            .update({ shopify_error: "PROCESSING" })
+            .eq("id", orderId)
+            .is("shopify_order_id", null)
+            .eq("shopify_error", order.shopify_error)
+            .select("id")
+            .maybeSingle();
+          preclaimOk = !!pc;
+        }
+
+        if (!preclaimOk) {
+          console.log(`[MP Webhook] Perdida la carrera por orden ${orderId} — otro proceso ya la tomó`);
+          return NextResponse.json({ ok: true });
+        }
+
         const { data: items } = await supabase
           .from("order_items")
           .select("name, variant, price, quantity, shopify_variant_id")

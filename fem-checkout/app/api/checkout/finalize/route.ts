@@ -40,6 +40,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
+  // Pre-claim: previene que dos llamadas concurrentes ambas creen una orden en Shopify.
+  // Usa el valor actual de shopify_error como condición CAS (compare-and-swap atómico).
+  if (order.shopify_error === "PROCESSING") {
+    console.log(`[Finalize] Orden ${order_id} ya siendo procesada por otra llamada — saliendo`);
+    return NextResponse.json({ ok: true, already_processing: true });
+  }
+
+  let preclaimOk = false;
+  if (order.shopify_error === null) {
+    const { data: pc } = await supabase
+      .from("orders")
+      .update({ shopify_error: "PROCESSING" })
+      .eq("id", order_id)
+      .is("shopify_order_id", null)
+      .is("shopify_error", null)
+      .select("id")
+      .maybeSingle();
+    preclaimOk = !!pc;
+  } else {
+    const { data: pc } = await supabase
+      .from("orders")
+      .update({ shopify_error: "PROCESSING" })
+      .eq("id", order_id)
+      .is("shopify_order_id", null)
+      .eq("shopify_error", order.shopify_error)
+      .select("id")
+      .maybeSingle();
+    preclaimOk = !!pc;
+  }
+
+  if (!preclaimOk) {
+    console.log(`[Finalize] Perdida la carrera por orden ${order_id} — otra llamada ya la tomó`);
+    return NextResponse.json({ ok: true, lost_claim: true });
+  }
+
   const { data: items } = await supabase
     .from("order_items")
     .select("name, variant, price, quantity, shopify_variant_id")

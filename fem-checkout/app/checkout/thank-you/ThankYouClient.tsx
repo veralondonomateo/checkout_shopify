@@ -179,6 +179,7 @@ export default function ThankYouClient() {
 
     // sendBeacon para cuando el usuario cierra la pestaña
     const beaconFinalize = () => {
+      if (finalizedRef.current) return; // ya finalizó vía interacción del usuario
       const payload = JSON.stringify({ order_id: orderId });
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
