@@ -202,6 +202,8 @@ export interface ShopifyOrderInput {
   paymentMethod: "mercadopago" | "contraentrega";
   mpPaymentId?: string | null;
   femOrderId: string;
+  couponCode?: string | null;
+  discount?: number | null;
 }
 
 export async function createShopifyOrder(
@@ -259,9 +261,22 @@ export async function createShopifyOrder(
       ...(input.mpPaymentId
         ? [{ name: "mp_payment_id", value: input.mpPaymentId }]
         : []),
+      ...(input.couponCode
+        ? [{ name: "coupon_code", value: input.couponCode }]
+        : []),
     ],
     tags: `fem-checkout,${input.paymentMethod}`,
   };
+
+  if (input.couponCode && input.discount && input.discount > 0) {
+    orderBody.discount_codes = [
+      {
+        code: input.couponCode,
+        amount: input.discount.toFixed(2),
+        type: "fixed_amount",
+      },
+    ];
+  }
 
   if (input.shipping > 0) {
     orderBody.shipping_lines = [

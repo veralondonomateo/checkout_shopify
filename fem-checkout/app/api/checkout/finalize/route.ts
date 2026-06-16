@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const { data: order } = await supabase
     .from("orders")
-    .select("*")
+    .select("*, discount::float8, coupon_code")
     .eq("id", order_id)
     .single();
 
@@ -101,6 +101,8 @@ export async function POST(req: NextRequest) {
       total: order.total,
       paymentMethod: "contraentrega",
       femOrderId: order_id,
+      couponCode: order.coupon_code ?? null,
+      discount: order.discount ?? null,
     });
 
     // Atomic claim: only update if no other process beat us (race-condition guard)

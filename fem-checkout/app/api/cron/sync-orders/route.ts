@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   // so orders with shopify_error=null would be silently excluded. Use OR to include them.
   const { data: orphans, error } = await supabase
     .from("orders")
-    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, payment_method, shopify_error")
+    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, discount, coupon_code, payment_method, shopify_error")
     .eq("payment_status", "approved")
     .is("shopify_order_id", null)
     .or("shopify_error.is.null,shopify_error.not.ilike.PERMANENT:%")
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     // Re-check inside loop in case a concurrent finalize just ran
     const { data: fresh } = await supabase
       .from("orders")
-      .select("shopify_order_id")
+      .select("shopify_order_id, coupon_code, discount")
       .eq("id", order.id)
       .single();
 
@@ -85,6 +85,8 @@ export async function GET(req: NextRequest) {
         total: order.total,
         paymentMethod: order.payment_method,
         femOrderId: order.id,
+        couponCode: order.coupon_code ?? null,
+        discount: order.discount ? parseFloat(order.discount) : null,
       });
 
       // Atomic claim: only update if no other process beat us (race-condition guard)

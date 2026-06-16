@@ -195,6 +195,8 @@ export async function POST(req: NextRequest) {
             paymentMethod: "mercadopago",
             mpPaymentId: paymentId,
             femOrderId: orderId,
+            couponCode: order.coupon_code ?? null,
+            discount: order.discount ? parseFloat(order.discount) : null,
           });
 
           // Atomic update: only claim the row if no other process beat us to it
