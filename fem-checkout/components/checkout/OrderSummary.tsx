@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import { OrderItem } from "@/types/checkout";
 
@@ -34,8 +33,6 @@ export default function OrderSummary({
   onCouponChange, onCouponApply,
   mainQty, onMainQtyChange,
 }: OrderSummaryProps) {
-  const [couponOpen, setCouponOpen] = useState(false);
-
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6 space-y-5">
       {/* Items */}
@@ -85,45 +82,36 @@ export default function OrderSummary({
 
       <div className="border-t border-gray-100" />
 
-      {/* Coupon — hidden behind toggle to avoid code-hunting abandonment */}
+      {/* Coupon */}
       {onCouponChange && onCouponApply && (
         <>
           <div>
-            {!couponApplied && (
+            <p className="text-xs font-semibold text-gray-700 mb-2">Código de descuento</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={coupon}
+                onChange={(e) => onCouponChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
+                placeholder="Ej: FEM10"
+                className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
+                  focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors duration-150
+                  ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
+                disabled={couponApplied}
+              />
               <button
-                type="button"
-                onClick={() => setCouponOpen((v) => !v)}
-                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+                onClick={onCouponApply}
+                disabled={couponApplied || !coupon.trim()}
+                className="px-4 py-2.5 rounded-md bg-gray-900 text-white text-sm font-medium hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {couponOpen ? "Ocultar código" : "¿Tienes un código de descuento?"}
+                {couponApplied ? "✓" : "Aplicar"}
               </button>
-            )}
-            {(couponOpen || couponApplied) && (
-              <div className="mt-2">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={coupon}
-                    onChange={(e) => onCouponChange(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && onCouponApply()}
-                    placeholder="Código de descuento"
-                    className={`flex-1 px-3.5 py-2.5 rounded-md border text-sm bg-white placeholder-gray-400 text-gray-900
-                      focus:outline-none focus:ring-1 focus:ring-[#fc5245]/20 focus:border-[#fc5245] transition-colors duration-150
-                      ${couponError ? "border-red-300" : couponApplied ? "border-green-400 bg-green-50" : "border-gray-300"}`}
-                    disabled={couponApplied}
-                    autoFocus={couponOpen && !couponApplied}
-                  />
-                  <button
-                    onClick={onCouponApply}
-                    disabled={couponApplied || !coupon.trim()}
-                    className="px-4 py-2.5 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {couponApplied ? "✓" : "Aplicar"}
-                  </button>
-                </div>
-                {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
-                {couponApplied && <p className="text-xs text-green-600 mt-1 font-medium">Código aplicado</p>}
-              </div>
+            </div>
+            {couponError && <p className="text-xs text-red-500 mt-1">{couponError}</p>}
+            {couponApplied && discount > 0 && (
+              <p className="text-xs text-green-600 mt-1 font-medium">
+                Descuento aplicado: -{new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 }).format(discount)}
+              </p>
             )}
           </div>
 

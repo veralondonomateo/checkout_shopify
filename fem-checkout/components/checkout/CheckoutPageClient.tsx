@@ -77,6 +77,7 @@ const SHIPPING = 15000;
 const COUPON_CODES: Record<string, number> = {
   FEM10: 0.1,
   MISTERIOSO: 0.05,
+  AIDA: 0.2,
 };
 
 interface CheckoutPageClientProps {
