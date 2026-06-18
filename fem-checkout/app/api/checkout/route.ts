@@ -8,6 +8,13 @@ const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
 });
 
+// Source of truth for coupon codes — never trust client-sent discount amounts
+const COUPON_CODES: Record<string, number> = {
+  FEM10: 0.1,
+  MISTERIOSO: 0.05,
+  AIDA: 0.2,
+};
+
 interface CheckoutBody {
   email: string;
   firstName: string;
@@ -53,8 +60,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Pago contra entrega no disponible para Puerto Carreño" }, { status: 400 });
   }
 
-  // Validate totals server-side — never trust client-sent numbers
-  const discount = body.discount ?? 0;
+  // Validate coupon and compute discount server-side — never trust client-sent amounts
+  let discount = 0;
+  if (body.couponCode) {
+    const code = body.couponCode.trim().toUpperCase();
+    const rate = COUPON_CODES[code];
+    if (rate === undefined) {
+      return NextResponse.json({ error: "Código de descuento inválido" }, { status: 400 });
+    }
+    discount = Math.round(body.subtotal * rate);
+  } else if ((body.discount ?? 0) > 0) {
+    // Discount without a coupon code is not allowed
+    return NextResponse.json({ error: "Descuento sin código de cupón" }, { status: 400 });
+  }
+
+  // Validate totals server-side
   const expectedTotal = body.subtotal + body.shipping - discount;
   if (body.total <= 0) {
     return NextResponse.json({ error: "El total debe ser mayor a cero" }, { status: 400 });
@@ -85,8 +105,8 @@ export async function POST(req: NextRequest) {
         body.paymentMethod === "contraentrega" ? "approved" : "pending",
       subtotal: body.subtotal,
       shipping: body.shipping,
-      discount: body.discount ?? 0,
-      coupon_code: body.couponCode ?? null,
+      discount,
+      coupon_code: body.couponCode ? body.couponCode.trim().toUpperCase() : null,
       total: body.total,
     })
     .select("id")
@@ -161,14 +181,14 @@ export async function POST(req: NextRequest) {
     }));
 
     // Apply discount as a line item so MP totals match exactly
-    if (body.couponCode && body.discount && body.discount > 0) {
+    if (body.couponCode && discount > 0) {
       mpItems.push({
         id: "discount",
-        title: `Descuento ${body.couponCode}`,
-        description: `Descuento ${body.couponCode}`,
+        title: `Descuento ${body.couponCode.trim().toUpperCase()}`,
+        description: `Descuento ${body.couponCode.trim().toUpperCase()}`,
         category_id: "health_and_beauty",
         quantity: 1,
-        unit_price: -body.discount,
+        unit_price: -discount,
         currency_id: "COP",
         picture_url: "",
       });
