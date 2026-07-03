@@ -20,7 +20,9 @@ const schema = z.object({
     .min(1, "Este campo es obligatorio")
     .transform((v) => v.trim())
     .refine(
-      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+      // No dot right before the @ (e.g. "ana.@mail.com") — Shopify rejects this as invalid
+      // even though it looks fine to a naive regex.
+      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && !v.includes(".@"),
       "Ingresa un email válido"
     ),
   firstName: z.string().min(2, "Ingresa tu nombre").regex(/^[a-zA-ZáéíóúüÁÉÍÓÚÜ\s\-']+$/, "Solo letras, sin ñ ni caracteres especiales"),

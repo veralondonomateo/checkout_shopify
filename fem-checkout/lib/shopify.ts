@@ -213,10 +213,13 @@ export async function createShopifyOrder(
 
   // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
   const sanitized = sanitizeEmail(input.email);
-  // Stricter than the naive /[^\s@]+/ pattern: TLD must be letters-only, no trailing/double dots
+  // Stricter than the naive /[^\s@]+/ pattern: TLD must be letters-only, no trailing/double
+  // dots, and no dot immediately before the @ (e.g. "jeann.@hotmail.com") — Shopify rejects
+  // all of these with "customer.email_address is invalid" even though a looser regex passes them.
   const isValidEmail =
     !sanitized.endsWith(".") &&
     !sanitized.includes("..") &&
+    !sanitized.includes(".@") &&
     /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(sanitized);
   // Some old orders have phone numbers/malformed addresses stored as email — use synthetic fallback
   const cleanEmail = isValidEmail ? sanitized : `pedido-${input.femOrderId.slice(0, 8)}@checkoutfem.com`;
