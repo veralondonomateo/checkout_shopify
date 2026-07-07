@@ -78,6 +78,8 @@ const COUPON_CODES: Record<string, number> = {
   FEM10: 0.1,
   MISTERIOSO: 0.05,
   AIDA: 0.2,
+  NEW10: 0.1,
+  QUIEROFEM: 0.1,
 };
 
 interface CheckoutPageClientProps {

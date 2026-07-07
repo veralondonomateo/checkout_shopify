@@ -13,6 +13,14 @@ const COUPON_CODES: Record<string, number> = {
   FEM10: 0.1,
   MISTERIOSO: 0.05,
   AIDA: 0.2,
+  NEW10: 0.1,
+  QUIEROFEM: 0.1,
+};
+
+// Máximo de usos por cliente (email) — códigos sin entrada aquí no tienen límite
+const COUPON_USAGE_LIMITS: Record<string, number> = {
+  NEW10: 1,
+  QUIEROFEM: 2,
 };
 
 interface CheckoutBody {
@@ -68,6 +76,33 @@ export async function POST(req: NextRequest) {
     if (rate === undefined) {
       return NextResponse.json({ error: "Código de descuento inválido" }, { status: 400 });
     }
+
+    const usageLimit = COUPON_USAGE_LIMITS[code];
+    if (usageLimit !== undefined) {
+      const email = body.email.trim().toLowerCase();
+      const { data: priorOrders, error: usageError } = await supabase
+        .from("orders")
+        .select("email")
+        .eq("coupon_code", code)
+        .neq("payment_status", "failure");
+
+      if (usageError) {
+        console.error("Supabase coupon usage lookup error:", usageError);
+        return NextResponse.json({ error: "No se pudo validar el cupón" }, { status: 500 });
+      }
+
+      const usageCount = (priorOrders ?? []).filter(
+        (o) => o.email.trim().toLowerCase() === email
+      ).length;
+
+      if (usageCount >= usageLimit) {
+        return NextResponse.json(
+          { error: "Ya alcanzaste el límite de usos de este cupón" },
+          { status: 400 }
+        );
+      }
+    }
+
     discount = Math.round(body.subtotal * rate);
   } else if ((body.discount ?? 0) > 0) {
     // Discount without a coupon code is not allowed
