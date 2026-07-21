@@ -12,6 +12,7 @@ import ShippingSection from "./ShippingSection";
 import UpsellSection from "./UpsellSection";
 import PaymentSection from "./PaymentSection";
 import Button from "@/components/ui/Button";
+import { trackStartedCheckout } from "@/lib/klaviyo";
 
 const schema = z.object({
   // Require a valid email — phone numbers break Mercado Pago's payer.email
@@ -98,6 +99,23 @@ export default function CheckoutForm({
   });
 
 
+  // Fire Klaviyo "Started Checkout" as soon as a valid email is entered (on blur),
+  // capturing shoppers who abandon before paying. identify re-runs on correction;
+  // the track itself fires only once per cart/session (guarded inside the helper).
+  const handleEmailBlur = (email: string) => {
+    const trimmed = email.trim();
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) && !trimmed.includes(".@");
+    if (!valid) return;
+    trackStartedCheckout({
+      email: trimmed,
+      firstName: watch("firstName"),
+      lastName: watch("lastName"),
+      phone: watch("phone"),
+      items: allItems,
+      total,
+    });
+  };
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     setSubmitError("");
@@ -147,7 +165,7 @@ export default function CheckoutForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-      <ContactSection register={register} errors={errors} />
+      <ContactSection register={register} errors={errors} onEmailBlur={handleEmailBlur} />
       <DeliverySection register={register} errors={errors} watch={watch} setValue={setValue} />
       <ShippingSection />
 

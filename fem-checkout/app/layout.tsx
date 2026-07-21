@@ -55,6 +55,12 @@ export default function RootLayout({
             alt=""
           />
         </noscript>
+        {/* Klaviyo onsite tracking — https://developers.klaviyo.com/en/docs/javascript_api */}
+        <Script
+          id="klaviyo-onsite"
+          strategy="afterInteractive"
+          src="https://static.klaviyo.com/onsite/js/TDVtU4/klaviyo.js"
+        />
       </head>
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>

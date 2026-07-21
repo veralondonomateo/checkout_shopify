@@ -7,9 +7,12 @@ import Input from "@/components/ui/Input";
 interface ContactSectionProps {
   register: UseFormRegister<CheckoutFormData>;
   errors: FieldErrors<CheckoutFormData>;
+  onEmailBlur?: (email: string) => void;
 }
 
-export default function ContactSection({ register, errors }: ContactSectionProps) {
+export default function ContactSection({ register, errors, onEmailBlur }: ContactSectionProps) {
+  const emailField = register("email");
+
   return (
     <section className="bg-white rounded-lg border border-gray-200 p-5 sm:p-6">
       <div className="flex items-center gap-2.5 mb-5">
@@ -30,7 +33,12 @@ export default function ContactSection({ register, errors }: ContactSectionProps
             </svg>
           }
           error={errors.email?.message}
-          {...register("email")}
+          {...emailField}
+          onBlur={(e) => {
+            // Preserve react-hook-form's own blur handling, then notify parent.
+            emailField.onBlur(e);
+            onEmailBlur?.(e.target.value);
+          }}
         />
 
         <label className="flex items-center gap-2.5 cursor-pointer select-none group">
