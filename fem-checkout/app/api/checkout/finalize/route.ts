@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
 import { sendAlert } from "@/lib/alert";
+import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
 
 // Crea la orden en Shopify para pedidos contraentrega, llamado desde el
 // thank-you page tras la ventana de upsell (90 s o al cerrar la pestaña).
@@ -40,35 +41,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
-  // Pre-claim: previene que dos llamadas concurrentes ambas creen una orden en Shopify.
-  // Usa el valor actual de shopify_error como condición CAS (compare-and-swap atómico).
-  if (order.shopify_error === "PROCESSING") {
+  // Pre-claim: previene que dos procesos concurrentes creen ambos una orden en
+  // Shopify. Mismo protocolo que el webhook de MP y el cron (lib/order-sync).
+  if (isProcessingActive(order.shopify_error)) {
     console.log(`[Finalize] Orden ${order_id} ya siendo procesada por otra llamada — saliendo`);
     return NextResponse.json({ ok: true, already_processing: true });
   }
 
-  let preclaimOk = false;
-  if (order.shopify_error === null) {
-    const { data: pc } = await supabase
-      .from("orders")
-      .update({ shopify_error: "PROCESSING" })
-      .eq("id", order_id)
-      .is("shopify_order_id", null)
-      .is("shopify_error", null)
-      .select("id")
-      .maybeSingle();
-    preclaimOk = !!pc;
-  } else {
-    const { data: pc } = await supabase
-      .from("orders")
-      .update({ shopify_error: "PROCESSING" })
-      .eq("id", order_id)
-      .is("shopify_order_id", null)
-      .eq("shopify_error", order.shopify_error)
-      .select("id")
-      .maybeSingle();
-    preclaimOk = !!pc;
-  }
+  const preclaimOk = await claimOrderForShopify(supabase, order_id, order.shopify_error);
 
   if (!preclaimOk) {
     console.log(`[Finalize] Perdida la carrera por orden ${order_id} — otra llamada ya la tomó`);

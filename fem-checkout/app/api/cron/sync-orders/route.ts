@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { createShopifyOrder } from "@/lib/shopify";
 import { sendAlert } from "@/lib/alert";
+import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
 
 /**
  * Safety-net cron: finds every approved order (contraentrega + paid MP)
@@ -50,12 +51,25 @@ export async function GET(req: NextRequest) {
     // Re-check inside loop in case a concurrent finalize just ran
     const { data: fresh } = await supabase
       .from("orders")
-      .select("shopify_order_id, coupon_code, discount")
+      .select("shopify_order_id, coupon_code, discount, shopify_error")
       .eq("id", order.id)
       .single();
 
     if (fresh?.shopify_order_id) {
       results.push({ id: order.id, status: "ok", detail: "already_synced" });
+      continue;
+    }
+
+    // El cron no participaba del protocolo de reserva: si finalize o el webhook
+    // estaban creando la orden en ese instante, el cron creaba una segunda.
+    if (isProcessingActive(fresh?.shopify_error)) {
+      results.push({ id: order.id, status: "ok", detail: "processing_elsewhere" });
+      continue;
+    }
+
+    const claimed = await claimOrderForShopify(supabase, order.id, fresh?.shopify_error ?? null);
+    if (!claimed) {
+      results.push({ id: order.id, status: "ok", detail: "claim_lost" });
       continue;
     }
 

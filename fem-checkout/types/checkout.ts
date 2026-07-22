@@ -23,6 +23,19 @@ export interface StatesJson {
   states: StateData[];
 }
 
+/**
+ * Versión mínima de un producto de Shopify: solo lo que el checkout usa.
+ * El objeto completo (todas las imágenes, inventario, metadatos) viajaba
+ * serializado en el HTML del RSC payload sin que el cliente lo necesitara.
+ */
+export interface CheckoutProduct {
+  id: number;
+  title: string;
+  handle: string;
+  variants: Array<{ id: number; title: string; price: string }>;
+  images: Array<{ src: string }>;
+}
+
 export interface OrderItem {
   id: string;
   name: string;

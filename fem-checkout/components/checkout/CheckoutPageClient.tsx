@@ -2,13 +2,13 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { OrderItem } from "@/types/checkout";
-import { ShopifyProduct } from "@/lib/shopify";
+import { OrderItem, CheckoutProduct } from "@/types/checkout";
 import { UpsellProduct } from "./UpsellSection";
 import CheckoutHeader from "./CheckoutHeader";
 import CheckoutForm from "./CheckoutForm";
 import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
+import { trackMeta, trackTikTok } from "@/lib/pixels";
 
 const DEFAULT_ITEM: OrderItem = {
   id: "prod_001",
@@ -19,7 +19,7 @@ const DEFAULT_ITEM: OrderItem = {
   image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
 };
 
-function shopifyProductToItem(p: ShopifyProduct, variantId?: number): OrderItem {
+function shopifyProductToItem(p: CheckoutProduct, variantId?: number): OrderItem {
   const variant = variantId
     ? (p.variants.find((v) => v.id === variantId) ?? p.variants[0])
     : p.variants[0];
@@ -83,10 +83,10 @@ const COUPON_CODES: Record<string, number> = {
 };
 
 interface CheckoutPageClientProps {
-  shopifyProduct?: ShopifyProduct | null;
-  gomitasProduct?: ShopifyProduct | null;
-  jabonProduct?: ShopifyProduct | null;
-  ovulosProduct?: ShopifyProduct | null;
+  shopifyProduct?: CheckoutProduct | null;
+  gomitasProduct?: CheckoutProduct | null;
+  jabonProduct?: CheckoutProduct | null;
+  ovulosProduct?: CheckoutProduct | null;
   initialVariantId?: number;
   initialQty?: number;
 }
@@ -101,12 +101,15 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   const [mainQty, setMainQty] = useState(initialQty ?? 1);
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
-  // Disparar InitiateCheckout al cargar la página
+  // Disparar InitiateCheckout al cargar la página. Los pixeles ahora cargan
+  // diferidos, así que esperamos a que existan en vez de descartar el evento.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      if ((window as any).fbq) (window as any).fbq("track", "InitiateCheckout");
-      if ((window as any).ttq) (window as any).ttq.track("InitiateCheckout");
-    }
+    const cancelMeta = trackMeta("InitiateCheckout");
+    const cancelTikTok = trackTikTok("InitiateCheckout");
+    return () => {
+      cancelMeta();
+      cancelTikTok();
+    };
   }, []);
 
   // ── Coupon state (shared between form and order summary) ──────────────────

@@ -40,6 +40,8 @@ interface CheckoutBody {
   total: number;
   couponCode?: string;
   discount?: number;
+  /** Clave estable por intento de compra — evita pedidos duplicados. */
+  idempotencyKey?: string;
 }
 
 const APP_URL =
@@ -123,7 +125,30 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 1. Insertar la orden (siempre, antes de cualquier redirect) ──────────
-  const { data: order, error: insertError } = await supabase
+  // Idempotencia: el cliente manda una clave estable por intento de compra.
+  // Si esa clave ya existe reutilizamos la fila en vez de crear un pedido
+  // nuevo — así un doble clic o un reintento tras un corte de red no se
+  // convierte en dos órdenes en Shopify.
+  const idempotencyKey = body.idempotencyKey?.trim() || null;
+  let orderId: string | null = null;
+  let reusedExisting = false;
+
+  if (idempotencyKey) {
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existing) {
+      orderId = existing.id;
+      reusedExisting = true;
+      console.log(`[Checkout] Intento repetido (${idempotencyKey}) → reutilizando orden ${orderId}`);
+    }
+  }
+
+  if (!orderId) {
+    const { data: order, error: insertError } = await supabase
     .from("orders")
     .insert({
       email: body.email,
@@ -143,37 +168,67 @@ export async function POST(req: NextRequest) {
       discount,
       coupon_code: body.couponCode ? body.couponCode.trim().toUpperCase() : null,
       total: body.total,
+      idempotency_key: idempotencyKey,
     })
     .select("id")
     .single();
 
-  if (insertError || !order) {
-    console.error("Supabase insert error:", insertError);
-    return NextResponse.json(
-      { error: "No se pudo registrar la orden" },
-      { status: 500 }
-    );
+    if (insertError || !order) {
+      // 23505 = índice único de idempotencia: dos peticiones idénticas llegaron
+      // a la vez y la otra ganó la carrera. Reutilizamos su fila.
+      if (insertError?.code === "23505" && idempotencyKey) {
+        const { data: winner } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+
+        if (winner) {
+          orderId = winner.id;
+          reusedExisting = true;
+          console.log(`[Checkout] Carrera de doble envío (${idempotencyKey}) → orden ${orderId}`);
+        }
+      }
+
+      if (!orderId) {
+        console.error("Supabase insert error:", insertError);
+        return NextResponse.json(
+          { error: "No se pudo registrar la orden" },
+          { status: 500 }
+        );
+      }
+    } else {
+      orderId = order.id;
+    }
   }
 
-  const orderId: string = order.id;
+  if (!orderId) {
+    // Inalcanzable: las ramas anteriores retornan o asignan. Guarda explícita
+    // para que ningún cambio futuro deje pasar una orden sin id.
+    return NextResponse.json({ error: "No se pudo registrar la orden" }, { status: 500 });
+  }
 
   // ── 2. Guardar los items de la orden ─────────────────────────────────────
-  const { error: itemsError } = await supabase.from("order_items").insert(
-    body.items.map((item) => ({
-      order_id: orderId,
-      product_id: item.id,
-      name: item.name,
-      variant: item.variant ?? null,
-      price: item.price,
-      quantity: item.quantity,
-      image: item.image,
-      shopify_variant_id: item.shopifyVariantId ?? null,
-    }))
-  );
+  // En un intento repetido los items ya están guardados: insertarlos otra vez
+  // duplicaría el contenido del pedido.
+  if (!reusedExisting) {
+    const { error: itemsError } = await supabase.from("order_items").insert(
+      body.items.map((item) => ({
+        order_id: orderId,
+        product_id: item.id,
+        name: item.name,
+        variant: item.variant ?? null,
+        price: item.price,
+        quantity: item.quantity,
+        image: item.image,
+        shopify_variant_id: item.shopifyVariantId ?? null,
+      }))
+    );
 
-  if (itemsError) {
-    // No bloqueamos — la orden ya existe, los items se pueden recuperar
-    console.error("Supabase items insert error:", itemsError);
+    if (itemsError) {
+      // No bloqueamos — la orden ya existe, los items se pueden recuperar
+      console.error("Supabase items insert error:", itemsError);
+    }
   }
 
   // ── 3. Contraentrega: solo guardar en Supabase, NO crear en Shopify aún ──
@@ -181,17 +236,20 @@ export async function POST(req: NextRequest) {
   // thank-you page cuando el usuario decide sobre el upsell del jabón
   // (acepta o descarta). Así llega completa a Shopify y a MasterShop.
   if (body.paymentMethod === "contraentrega") {
-    // Conversions API: Purchase (contraentrega se considera conversión al registrar el pedido)
-    sendPurchaseEvent({
-      orderId,
-      email: body.email,
-      phone: body.phone,
-      value: body.total,
-      clientIp: req.headers.get("x-forwarded-for")?.split(",")[0] ?? undefined,
-      clientUserAgent: req.headers.get("user-agent") ?? undefined,
-      fbp: req.cookies.get("_fbp")?.value,
-      fbc: req.cookies.get("_fbc")?.value,
-    }).catch(() => {});
+    // Conversions API: Purchase (contraentrega se considera conversión al registrar el pedido).
+    // En un intento repetido ya se envió: no lo contamos dos veces.
+    if (!reusedExisting) {
+      sendPurchaseEvent({
+        orderId,
+        email: body.email,
+        phone: body.phone,
+        value: body.total,
+        clientIp: req.headers.get("x-forwarded-for")?.split(",")[0] ?? undefined,
+        clientUserAgent: req.headers.get("user-agent") ?? undefined,
+        fbp: req.cookies.get("_fbp")?.value,
+        fbc: req.cookies.get("_fbc")?.value,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       type: "contraentrega",

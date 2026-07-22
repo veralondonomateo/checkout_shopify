@@ -1,4 +1,5 @@
 import { OrderItem } from "@/types/checkout";
+import { whenAvailable } from "@/lib/pixels";
 
 // Klaviyo onsite tracking helper.
 //
@@ -91,9 +92,6 @@ export function trackStartedCheckout({
   items,
   total,
 }: StartedCheckoutInput): void {
-  const klaviyo = getKlaviyo();
-  if (!klaviyo) return;
-
   const trimmedEmail = email.trim();
   if (!trimmedEmail) return;
 
@@ -106,7 +104,7 @@ export function trackStartedCheckout({
 
   const cartId = getCartId();
 
-  const runTrack = () => {
+  const runTrack = (klaviyo: KlaviyoGlobal) => {
     if (alreadyTracked(cartId)) return;
     markTracked(cartId);
 
@@ -128,6 +126,16 @@ export function trackStartedCheckout({
     klaviyo.track(STARTED_CHECKOUT_EVENT, payload);
   };
 
-  // identify accepts a callback as its second argument; track after it resolves.
-  klaviyo.identify(identity, runTrack);
+  // klaviyo.js carga diferido (ver app/layout.tsx). El proxy buffer que se
+  // instala en el <head> hace que window.klaviyo exista desde el primer
+  // momento y encole las llamadas hasta que el script real llegue, así que
+  // esto normalmente resuelve de inmediato; la espera queda como red de
+  // seguridad por si el proxy no llegó a instalarse.
+  whenAvailable<KlaviyoGlobal>(
+    () => getKlaviyo(),
+    (klaviyo) => {
+      // identify accepts a callback as its second argument; track after it resolves.
+      klaviyo.identify(identity, () => runTrack(klaviyo));
+    }
+  );
 }

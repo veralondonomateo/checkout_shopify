@@ -1,6 +1,19 @@
 import { Suspense } from "react";
 import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
 import { getProducts, getProductByHandle, ShopifyProduct } from "@/lib/shopify";
+import { CheckoutProduct } from "@/types/checkout";
+
+/** Reduce el producto a lo que el cliente realmente renderiza. */
+function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
+  if (!p) return null;
+  return {
+    id: p.id,
+    title: p.title,
+    handle: p.handle,
+    variants: p.variants.map((v) => ({ id: v.id, title: v.title, price: v.price })),
+    images: p.images.slice(0, 1).map((i) => ({ src: i.src })),
+  };
+}
 
 export const metadata = {
   title: "FEM | Finalizar compra",
@@ -18,15 +31,24 @@ export default async function CheckoutPage({
 
   // Fetch all active products once, then match by handle/title — avoids
   // multiple round-trips and handles when exact handles differ from constants.
-  const [allProducts, shopifyProduct] = await Promise.all([
-    getProducts().catch(() => [] as ShopifyProduct[]),
-    product
-      ? getProductByHandle(product).catch((err) => {
-          console.error("[Checkout] Error fetching main product:", err);
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
+  const allProducts = await getProducts().catch(() => [] as ShopifyProduct[]);
+
+  // El producto principal casi siempre está en el catálogo que ya trajimos;
+  // solo caemos a una segunda llamada si el handle no aparece ahí.
+  let shopifyProduct: ShopifyProduct | null = null;
+  if (product) {
+    shopifyProduct =
+      allProducts.find((p) => p.handle === product) ??
+      allProducts.find((p) => p.handle.includes(product.replace(/-/g, ""))) ??
+      null;
+
+    if (!shopifyProduct) {
+      shopifyProduct = await getProductByHandle(product).catch((err) => {
+        console.error("[Checkout] Error fetching main product:", err);
+        return null;
+      });
+    }
+  }
 
   function findByTitle(pattern: RegExp): ShopifyProduct | null {
     return allProducts.find((p) => pattern.test(p.title)) ?? null;
@@ -59,10 +81,10 @@ export default async function CheckoutPage({
   return (
     <Suspense>
       <CheckoutPageClient
-        shopifyProduct={shopifyProduct}
-        gomitasProduct={gomitasProduct ?? null}
-        jabonProduct={jabonProduct ?? null}
-        ovulosProduct={ovulosProduct ?? null}
+        shopifyProduct={toCheckoutProduct(shopifyProduct)}
+        gomitasProduct={toCheckoutProduct(gomitasProduct ?? null)}
+        jabonProduct={toCheckoutProduct(jabonProduct ?? null)}
+        ovulosProduct={toCheckoutProduct(ovulosProduct ?? null)}
         initialVariantId={initialVariantId}
         initialQty={initialQty}
       />

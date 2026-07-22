@@ -1,11 +1,11 @@
 "use client";
 
 import { UseFormRegister, UseFormRegisterReturn, FieldErrors, UseFormWatch, UseFormSetValue } from "react-hook-form";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckoutFormData } from "@/types/checkout";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import statesData from "@/data/states.json";
+import { DEPARTMENTS, DEPARTMENT_SLUGS } from "@/data/departments";
 
 interface DeliverySectionProps {
   register: UseFormRegister<CheckoutFormData>;
@@ -33,27 +33,94 @@ function sanitizedRegister(
   };
 }
 
+// Cache de ciudades por departamento, compartido entre montajes del componente.
+const cityCache = new Map<string, string[]>();
+
+/**
+ * Sin ciudades el cliente no puede completar el pedido, así que esta carga no
+ * puede depender de una sola petición: reintenta y, si la red sigue fallando,
+ * cae al listado completo empaquetado (import dinámico, no entra en el bundle
+ * inicial y solo se descarga en ese caso excepcional).
+ */
+async function fetchCities(state: string): Promise<string[]> {
+  const cached = cityCache.get(state);
+  if (cached) return cached;
+
+  const slug = DEPARTMENT_SLUGS[state];
+  if (!slug) return [];
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`/api/cities/${slug}`);
+      if (res.ok) {
+        const { cities } = (await res.json()) as { cities: string[] };
+        if (cities.length > 0) {
+          cityCache.set(state, cities);
+          return cities;
+        }
+      }
+    } catch {
+      /* red intermitente — reintentamos */
+    }
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+  }
+
+  try {
+    const { default: statesData } = await import("@/data/states.json");
+    const found = statesData.states.find((s) => s.name === state);
+    const cities = (found?.cities ?? []).slice().sort((a, b) => a.localeCompare(b, "es"));
+    if (cities.length > 0) cityCache.set(state, cities);
+    return cities;
+  } catch {
+    return [];
+  }
+}
+
 export default function DeliverySection({ register, errors, watch, setValue }: DeliverySectionProps) {
   const selectedState = watch("state");
+  const [cities, setCities] = useState<string[]>([]);
+  const [loadingCities, setLoadingCities] = useState(false);
 
+  // Las opciones de departamento son estáticas (~1 KB en el bundle).
   const stateOptions = useMemo(
-    () =>
-      statesData.states
-        .slice()
-        .sort((a, b) => a.name.localeCompare(b.name, "es"))
-        .map((s) => ({ value: s.name, label: s.name })),
+    () => DEPARTMENTS.map((d) => ({ value: d.name, label: d.name })),
     []
   );
 
-  const cityOptions = useMemo(() => {
-    if (!selectedState) return [];
-    const found = statesData.states.find((s) => s.name === selectedState);
-    if (!found) return [];
-    return found.cities
-      .slice()
-      .sort((a, b) => a.localeCompare(b, "es"))
-      .map((c) => ({ value: c, label: c }));
+  // Las ciudades llegan bajo demanda: respuesta estática cacheada en el CDN.
+  // requestId evita que una respuesta lenta pise a una selección más reciente.
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    if (!selectedState) {
+      setCities([]);
+      setLoadingCities(false);
+      return;
+    }
+
+    const id = ++requestId.current;
+    const cached = cityCache.get(selectedState);
+    if (cached) {
+      setCities(cached);
+      setLoadingCities(false);
+      return;
+    }
+
+    setLoadingCities(true);
+    fetchCities(selectedState)
+      .then((list) => {
+        if (requestId.current !== id) return;
+        setCities(list);
+      })
+      .finally(() => {
+        if (requestId.current === id) setLoadingCities(false);
+      });
   }, [selectedState]);
+
+  const cityOptions = useMemo(
+    () => cities.map((c) => ({ value: c, label: c })),
+    [cities]
+  );
 
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setValue("state", e.target.value, { shouldValidate: true });
@@ -150,9 +217,16 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
           />
           <Select
             label="Ciudad"
-            placeholder={selectedState ? "Selecciona una ciudad" : "Primero elige el departamento"}
+            placeholder={
+              !selectedState
+                ? "Primero elige el departamento"
+                : loadingCities
+                  ? "Cargando ciudades…"
+                  : "Selecciona una ciudad"
+            }
             options={cityOptions}
-            disabled={!selectedState}
+            loading={loadingCities}
+            disabled={!selectedState || loadingCities}
             error={errors.city?.message}
             {...register("city")}
           />

@@ -5,6 +5,7 @@ import { createShopifyOrder } from "@/lib/shopify";
 import { sendPurchaseEvent } from "@/lib/meta";
 import { mapMPStatus } from "@/lib/mp";
 import { sendAlert } from "@/lib/alert";
+import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
 
 const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -134,34 +135,14 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (order && !order.shopify_order_id) {
-        // Pre-claim: previene que dos webhooks concurrentes ambos creen una orden en Shopify.
-        if (order.shopify_error === "PROCESSING") {
+        // Pre-claim: previene que dos procesos concurrentes creen ambos una
+        // orden en Shopify. Mismo protocolo que finalize y el cron.
+        if (isProcessingActive(order.shopify_error)) {
           console.log(`[MP Webhook] Orden ${orderId} ya siendo procesada — saliendo`);
           return NextResponse.json({ ok: true });
         }
 
-        let preclaimOk = false;
-        if (order.shopify_error === null) {
-          const { data: pc } = await supabase
-            .from("orders")
-            .update({ shopify_error: "PROCESSING" })
-            .eq("id", orderId)
-            .is("shopify_order_id", null)
-            .is("shopify_error", null)
-            .select("id")
-            .maybeSingle();
-          preclaimOk = !!pc;
-        } else {
-          const { data: pc } = await supabase
-            .from("orders")
-            .update({ shopify_error: "PROCESSING" })
-            .eq("id", orderId)
-            .is("shopify_order_id", null)
-            .eq("shopify_error", order.shopify_error)
-            .select("id")
-            .maybeSingle();
-          preclaimOk = !!pc;
-        }
+        const preclaimOk = await claimOrderForShopify(supabase, orderId, order.shopify_error);
 
         if (!preclaimOk) {
           console.log(`[MP Webhook] Perdida la carrera por orden ${orderId} — otro proceso ya la tomó`);

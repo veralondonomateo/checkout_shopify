@@ -51,17 +51,29 @@ async function getAccessToken(): Promise<string> {
 // ── REST client ────────────────────────────────────────────────────────────────
 const API_VERSION = "2024-10";
 
-async function shopifyFetch<T>(path: string, options?: RequestInit): Promise<T> {
+/**
+ * `revalidate` (segundos) activa el Data Cache de Next para lecturas que pueden
+ * servirse tibias — el catálogo de productos. Sin él, cada visita al checkout
+ * pagaba una ida y vuelta completa a la Admin API antes del primer byte.
+ * Las escrituras (órdenes) siguen sin caché.
+ */
+async function shopifyFetch<T>(
+  path: string,
+  options?: RequestInit & { revalidate?: number }
+): Promise<T> {
   const token = await getAccessToken();
   const url = `https://${process.env.SHOPIFY_DOMAIN}/admin/api/${API_VERSION}${path}`;
+  const { revalidate, ...init } = options ?? {};
   const res = await fetch(url, {
-    ...options,
+    ...init,
     headers: {
       "X-Shopify-Access-Token": token,
       "Content-Type": "application/json",
       ...options?.headers,
     },
-    cache: "no-store",
+    ...(revalidate !== undefined
+      ? { next: { revalidate } }
+      : { cache: "no-store" as const }),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -155,9 +167,13 @@ export async function findProductBySku(
 }
 
 // ── Product queries ────────────────────────────────────────────────────────────
+/** TTL del catálogo en el Data Cache de Next (precios/stock cambian poco). */
+export const PRODUCTS_REVALIDATE = 300;
+
 export async function getProducts(): Promise<ShopifyProduct[]> {
   const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
-    "/products.json?limit=250&status=active"
+    "/products.json?limit=250&status=active&fields=id,title,handle,status,variants,images",
+    { revalidate: PRODUCTS_REVALIDATE }
   );
   return data.products;
 }
@@ -167,7 +183,8 @@ export async function getProductByHandle(
 ): Promise<ShopifyProduct | null> {
   // Try exact handle first
   const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
-    `/products.json?handle=${encodeURIComponent(handle)}&limit=1`
+    `/products.json?handle=${encodeURIComponent(handle)}&limit=1&fields=id,title,handle,status,variants,images`,
+    { revalidate: PRODUCTS_REVALIDATE }
   );
   if (data.products[0]) return data.products[0];
 

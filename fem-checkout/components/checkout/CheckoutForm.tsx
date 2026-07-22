@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { OrderItem } from "@/types/checkout";
 import { UpsellProduct } from "./UpsellSection";
 import ContactSection from "./ContactSection";
@@ -83,6 +83,28 @@ export default function CheckoutForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
+  // `isSubmitting` es estado: React lo aplica en el siguiente render, así que
+  // dos toques muy seguidos alcanzan a disparar dos POST. El ref bloquea de
+  // forma síncrona, en el mismo tick.
+  const inFlight = useRef(false);
+
+  // Clave de idempotencia: se mantiene igual mientras el pedido sea el mismo,
+  // de modo que un reintento (o un doble envío) reutilice la orden ya creada
+  // en vez de generar una nueva. Cambia si el cliente modifica el carrito.
+  const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
+
+  const getIdempotencyKey = (signature: string): string => {
+    if (idempotencyRef.current?.signature === signature) {
+      return idempotencyRef.current.key;
+    }
+    const key =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    idempotencyRef.current = { signature, key };
+    return key;
+  };
+
   const {
     register,
     handleSubmit,
@@ -117,8 +139,22 @@ export default function CheckoutForm({
   };
 
   const onSubmit = async (data: FormData) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+
     setIsSubmitting(true);
     setSubmitError("");
+
+    // El pedido se identifica por su contenido + comprador: mismo pedido →
+    // misma clave → el servidor reutiliza la orden en vez de duplicarla.
+    const signature = JSON.stringify({
+      email: data.email.trim().toLowerCase(),
+      phone: data.phone,
+      items: allItems.map((i) => [i.id, i.quantity, i.price]),
+      total,
+      paymentMethod: data.paymentMethod,
+    });
+
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -131,6 +167,7 @@ export default function CheckoutForm({
           total,
           couponCode: coupon || undefined,
           discount: discount || undefined,
+          idempotencyKey: getIdempotencyKey(signature),
         }),
       });
 
@@ -158,7 +195,9 @@ export default function CheckoutForm({
     } catch (err) {
       console.error("Checkout error:", err);
       setSubmitError("Ocurrió un error al procesar tu pedido. Por favor intenta de nuevo.");
-    } finally {
+      // Solo se libera el bloqueo cuando hubo error: en el camino feliz la
+      // página se está redirigiendo y el botón debe seguir inhabilitado.
+      inFlight.current = false;
       setIsSubmitting(false);
     }
   };
