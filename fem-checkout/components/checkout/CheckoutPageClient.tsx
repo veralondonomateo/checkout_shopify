@@ -9,6 +9,7 @@ import CheckoutForm from "./CheckoutForm";
 import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
+import { COUPON_CODES } from "@/lib/coupons";
 
 const DEFAULT_ITEM: OrderItem = {
   id: "prod_001",
@@ -73,14 +74,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
 
 const SHIPPING = 15000;
 
-// Valid codes → discount rate
-const COUPON_CODES: Record<string, number> = {
-  FEM10: 0.1,
-  MISTERIOSO: 0.05,
-  AIDA: 0.2,
-  NEW10: 0.1,
-  QUIEROFEM: 0.1,
-};
+// Los códigos vienen de lib/coupons, el mismo módulo que valida el servidor.
 
 interface CheckoutPageClientProps {
   shopifyProduct?: CheckoutProduct | null;

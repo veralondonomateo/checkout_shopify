@@ -3,25 +3,15 @@ import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
 import { sendPurchaseEvent } from "@/lib/meta";
+import { COUPON_CODES, COUPON_USAGE_LIMITS } from "@/lib/coupons";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
 });
 
-// Source of truth for coupon codes — never trust client-sent discount amounts
-const COUPON_CODES: Record<string, number> = {
-  FEM10: 0.1,
-  MISTERIOSO: 0.05,
-  AIDA: 0.2,
-  NEW10: 0.1,
-  QUIEROFEM: 0.1,
-};
-
-// Máximo de usos por cliente (email) — códigos sin entrada aquí no tienen límite
-const COUPON_USAGE_LIMITS: Record<string, number> = {
-  NEW10: 1,
-  QUIEROFEM: 2,
-};
+// Los cupones viven en lib/coupons (los comparte con el cliente). El servidor
+// sigue siendo la autoridad: aquí se revalida el código y se recalcula el
+// descuento, nunca se confía en el monto que manda el navegador.
 
 interface CheckoutBody {
   email: string;
@@ -81,23 +71,20 @@ export async function POST(req: NextRequest) {
 
     const usageLimit = COUPON_USAGE_LIMITS[code];
     if (usageLimit !== undefined) {
-      const email = body.email.trim().toLowerCase();
-      const { data: priorOrders, error: usageError } = await supabase
-        .from("orders")
-        .select("email")
-        .eq("coupon_code", code)
-        .neq("payment_status", "failure");
+      // El conteo se hace en Postgres, no en memoria: antes se traían todos los
+      // pedidos del cupón y PostgREST corta en 1.000 filas, así que con un cupón
+      // popular los clientes que quedaban fuera del corte podían reutilizarlo.
+      const { data: usageCount, error: usageError } = await supabase.rpc(
+        "count_coupon_uses",
+        { p_code: code, p_email: body.email }
+      );
 
       if (usageError) {
         console.error("Supabase coupon usage lookup error:", usageError);
         return NextResponse.json({ error: "No se pudo validar el cupón" }, { status: 500 });
       }
 
-      const usageCount = (priorOrders ?? []).filter(
-        (o) => o.email.trim().toLowerCase() === email
-      ).length;
-
-      if (usageCount >= usageLimit) {
+      if ((usageCount ?? 0) >= usageLimit) {
         return NextResponse.json(
           { error: "Ya alcanzaste el límite de usos de este cupón" },
           { status: 400 }
