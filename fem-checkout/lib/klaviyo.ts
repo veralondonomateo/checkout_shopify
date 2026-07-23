@@ -1,32 +1,29 @@
 import { OrderItem } from "@/types/checkout";
-import { whenAvailable } from "@/lib/pixels";
 
-// Klaviyo onsite tracking helper.
+// Klaviyo tracking del checkout — vía Client API, sin el script onsite.
 //
-// The onsite script (loaded in app/layout.tsx) exposes a global `klaviyo`
-// object with `.identify(properties, callback)` and `.track(event, properties)`.
-// We use it to fire a "Started Checkout" event as soon as the shopper types a
-// valid email — this checkout is a custom Next.js app, not Shopify-hosted, so
-// Klaviyo never receives Shopify's built-in "Checkout Started" event.
+// Antes esto dependía de klaviyo.js (el script onsite). Ese script es también
+// el que renderiza el popup de captura de emails, que en el checkout tapaba el
+// formulario de pago y arrastraba ~14 archivos. Como aquí solo necesitamos
+// enviar un evento, lo hacemos con una única petición a la Client API:
+// el popup desaparece del checkout y no queda nada de JS de terceros.
+//
+// La Client API está diseñada para el navegador y usa solo el ID público de la
+// cuenta (nunca una clave privada).
 //
 // Docs:
-// - https://developers.klaviyo.com/en/docs/javascript_api
+// - https://developers.klaviyo.com/en/reference/create_client_event
 // - https://developers.klaviyo.com/en/docs/guide_to_integrating_a_platform_without_a_pre_built_klaviyo_integration
+
+// ID público de la cuenta de Klaviyo que recibe los eventos del checkout.
+// Es el mismo que servía klaviyo.js (…/onsite/js/TDVtU4/klaviyo.js).
+const KLAVIYO_COMPANY_ID = "TDVtU4";
+const KLAVIYO_REVISION = "2024-10-15";
+const KLAVIYO_EVENTS_URL = `https://a.klaviyo.com/client/events?company_id=${KLAVIYO_COMPANY_ID}`;
 
 // The event name is EXACT and intentionally distinct from Shopify's
 // "Checkout Started" metric so the two stay separable in Klaviyo.
 const STARTED_CHECKOUT_EVENT = "Started Checkout";
-
-interface KlaviyoGlobal {
-  identify: (properties: Record<string, unknown>, callback?: () => void) => void;
-  track: (event: string, properties?: Record<string, unknown>) => void;
-}
-
-function getKlaviyo(): KlaviyoGlobal | null {
-  if (typeof window === "undefined") return null;
-  const k = (window as unknown as { klaviyo?: KlaviyoGlobal }).klaviyo;
-  return k && typeof k.identify === "function" ? k : null;
-}
 
 // Format a Colombian number to E.164 (+57...). Returns undefined when the value
 // doesn't look like a valid 10-digit local number, so we can omit it.
@@ -79,10 +76,11 @@ interface StartedCheckoutInput {
 }
 
 /**
- * Identify the profile and fire "Started Checkout" in Klaviyo.
+ * Envía "Started Checkout" a Klaviyo, creando o actualizando el perfil en la
+ * misma petición (el bloque `profile` del evento hace de identify).
  *
- * - identify runs every time (so a corrected email updates the profile),
- * - the track fires only once per cart/session.
+ * Se dispara una sola vez por carrito/sesión. Además va `unique_id`, así que
+ * si una petición se repitiera, Klaviyo la descarta del lado del servidor.
  */
 export function trackStartedCheckout({
   email,
@@ -92,50 +90,64 @@ export function trackStartedCheckout({
   items,
   total,
 }: StartedCheckoutInput): void {
+  if (typeof window === "undefined") return;
+
   const trimmedEmail = email.trim();
   if (!trimmedEmail) return;
 
-  // Only include fields that are actually filled; email is the only required one.
-  const identity: Record<string, unknown> = { email: trimmedEmail };
-  if (firstName?.trim()) identity.first_name = firstName.trim();
-  if (lastName?.trim()) identity.last_name = lastName.trim();
-  const phoneNumber = toE164(phone);
-  if (phoneNumber) identity.phone_number = phoneNumber;
-
   const cartId = getCartId();
+  if (alreadyTracked(cartId)) return;
+  markTracked(cartId);
 
-  const runTrack = (klaviyo: KlaviyoGlobal) => {
-    if (alreadyTracked(cartId)) return;
-    markTracked(cartId);
+  // Solo incluimos lo que está lleno; el email es lo único obligatorio.
+  const profileAttributes: Record<string, unknown> = { email: trimmedEmail };
+  if (firstName?.trim()) profileAttributes.first_name = firstName.trim();
+  if (lastName?.trim()) profileAttributes.last_name = lastName.trim();
+  const phoneNumber = toE164(phone);
+  if (phoneNumber) profileAttributes.phone_number = phoneNumber;
 
-    const payload = {
-      $event_id: `${cartId}_${Date.now()}`,
-      $value: total,
-      ItemNames: items.map((i) => i.name),
-      CheckoutURL: window.location.href,
-      Items: items.map((i) => ({
-        ProductID: i.id,
-        ProductName: i.name,
-        Quantity: i.quantity,
-        ItemPrice: i.price,
-        RowTotal: i.price * i.quantity,
-        ImageURL: i.image,
-      })),
-    };
-
-    klaviyo.track(STARTED_CHECKOUT_EVENT, payload);
+  const body = {
+    data: {
+      type: "event",
+      attributes: {
+        unique_id: cartId,
+        value: total,
+        properties: {
+          $value: total,
+          ItemNames: items.map((i) => i.name),
+          CheckoutURL: window.location.href,
+          Items: items.map((i) => ({
+            ProductID: i.id,
+            ProductName: i.name,
+            Quantity: i.quantity,
+            ItemPrice: i.price,
+            RowTotal: i.price * i.quantity,
+            ImageURL: i.image,
+          })),
+        },
+        metric: {
+          data: { type: "metric", attributes: { name: STARTED_CHECKOUT_EVENT } },
+        },
+        profile: {
+          data: { type: "profile", attributes: profileAttributes },
+        },
+      },
+    },
   };
 
-  // klaviyo.js carga diferido (ver app/layout.tsx). El proxy buffer que se
-  // instala en el <head> hace que window.klaviyo exista desde el primer
-  // momento y encole las llamadas hasta que el script real llegue, así que
-  // esto normalmente resuelve de inmediato; la espera queda como red de
-  // seguridad por si el proxy no llegó a instalarse.
-  whenAvailable<KlaviyoGlobal>(
-    () => getKlaviyo(),
-    (klaviyo) => {
-      // identify accepts a callback as its second argument; track after it resolves.
-      klaviyo.identify(identity, () => runTrack(klaviyo));
+  // keepalive: el cliente suele salir del checkout justo después (redirect a
+  // Mercado Pago), y sin esto el navegador cancelaría la petición.
+  fetch(KLAVIYO_EVENTS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", revision: KLAVIYO_REVISION },
+    body: JSON.stringify(body),
+    keepalive: true,
+  }).catch(() => {
+    // Si falla, permitimos que un intento posterior lo reintente.
+    try {
+      sessionStorage.removeItem(`fem-klaviyo-started-${cartId}`);
+    } catch {
+      /* ignore */
     }
-  );
+  });
 }

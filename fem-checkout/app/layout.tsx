@@ -28,7 +28,8 @@ export default function RootLayout({
         {/* Los pixeles cargan después del load; basta resolver el DNS por adelantado. */}
         <link rel="dns-prefetch" href="https://connect.facebook.net" />
         <link rel="dns-prefetch" href="https://analytics.tiktok.com" />
-        <link rel="dns-prefetch" href="https://static.klaviyo.com" />
+        {/* Klaviyo ya no sirve scripts aquí; solo se le manda un evento. */}
+        <link rel="dns-prefetch" href="https://a.klaviyo.com" />
 
         {/* TikTok Pixel base code — lazyOnload: no compite con la hidratación */}
         <Script id="tiktok-pixel" strategy="lazyOnload">{`
@@ -63,38 +64,15 @@ export default function RootLayout({
             alt=""
           />
         </noscript>
-        {/* ── Klaviyo onsite (popup/forms + tracking) — carga diferida ──────────
-            klaviyo.js cuesta ~400 ms de main thread y arrastra ~14 archivos más
-            para pintar el popup. Cargado durante el render competía con la
-            hidratación del checkout.
-
-            1) Proxy buffer (snippet oficial de Klaviyo): intercepta cualquier
-               llamada temprana a window.klaviyo y la encola en _klOnsite, así
-               nada se pierde aunque el script real todavía no exista.
-            2) El tag lleva data-src en vez de src → el navegador no lo descarga.
-            3) A la primera interacción (o 8 s tras el load) se copia data-src a
-               src dentro de un requestIdleCallback.
-
-            La configuración del popup vive en los servidores de Klaviyo, atada
-            al company_id TDVtU4: esto solo cambia CUÁNDO se descarga el script,
-            no toca diseño, targeting ni listas.
-            Rollback: volver a <Script src="…klaviyo.js" strategy="lazyOnload" />. */}
-        <script
-          id="klaviyo-proxy"
-          dangerouslySetInnerHTML={{
-            __html: `!function(){if(!window.klaviyo){window._klOnsite=window._klOnsite||[];try{window.klaviyo=new Proxy({},{get:function(n,i){return"push"===i?function(){var n;(n=window._klOnsite).push.apply(n,arguments)}:function(){for(var n=arguments.length,o=new Array(n),w=0;w<n;w++)o[w]=arguments[w];var t="function"==typeof o[o.length-1]?o.pop():void 0,e=new Promise((function(n){window._klOnsite.push([i].concat(o,[function(i){t&&t(i),n(i)}]))}));return e}}})}catch(n){window.klaviyo=window.klaviyo||[],window.klaviyo.push=function(){var n;(n=window._klOnsite).push.apply(n,arguments)}}}}();`,
-          }}
-        />
-        <script
-          id="klaviyo-deferred"
-          data-src="https://static.klaviyo.com/onsite/js/TDVtU4/klaviyo.js"
-        />
-        <script
-          id="klaviyo-activator"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var done=false;var events=['mousedown','mousemove','keydown','scroll','touchstart','click'];function load(){if(done)return;done=true;events.forEach(function(e){window.removeEventListener(e,load,{passive:true})});var el=document.getElementById('klaviyo-deferred');if(!el||!el.getAttribute('data-src'))return;var go=function(){el.setAttribute('src',el.getAttribute('data-src'))};'requestIdleCallback' in window?requestIdleCallback(go):setTimeout(go,200)}events.forEach(function(e){window.addEventListener(e,load,{passive:true})});window.addEventListener('load',function(){setTimeout(load,8000)})})();`,
-          }}
-        />
+        {/* Klaviyo NO carga su script onsite aquí a propósito.
+            klaviyo.js es lo que renderiza el popup de captura de emails, que en
+            el checkout se montaba encima del formulario de pago y arrastraba
+            ~14 archivos más. Lo único que necesitamos de Klaviyo en esta página
+            es el evento "Started Checkout", y eso se envía con una sola
+            petición a la Client API desde lib/klaviyo.ts.
+            Consecuencia buscada: cero JS de terceros de Klaviyo y sin popup.
+            "Active on Site" deja de registrarse SOLO en el checkout; en la
+            tienda Shopify sigue igual, porque allí el script no se tocó. */}
       </head>
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
