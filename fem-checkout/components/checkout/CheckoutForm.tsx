@@ -3,7 +3,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OrderItem } from "@/types/checkout";
 import { UpsellProduct } from "./UpsellSection";
 import ContactSection from "./ContactSection";
@@ -88,20 +88,62 @@ export default function CheckoutForm({
   // forma síncrona, en el mismo tick.
   const inFlight = useRef(false);
 
+  // Hasta que React hidrata, el onSubmit todavía no está enganchado: un toque
+  // en el botón enviaba el <form> de forma nativa, que recarga la página con
+  // los datos del cliente en la query string y sin crear ningún pedido.
+  // Mantener el botón inhabilitado ese instante evita perder esa venta (y que
+  // el email, el teléfono y la dirección queden escritos en la URL).
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
   // Clave de idempotencia: se mantiene igual mientras el pedido sea el mismo,
   // de modo que un reintento (o un doble envío) reutilice la orden ya creada
   // en vez de generar una nueva. Cambia si el cliente modifica el carrito.
+  //
+  // Vive en sessionStorage, no en memoria: si solo estuviera en un ref, una
+  // recarga o un "volver atrás" desde la página de gracias generaría una clave
+  // nueva y el mismo pedido entraría dos veces (visto en producción, dos envíos
+  // idénticos con 4 minutos de diferencia).
+  const IDEMPOTENCY_STORAGE_KEY = "fem-idempotency";
+  // Pasada esta ventana, un pedido idéntico se considera una compra nueva y
+  // legítima en vez de un reenvío del mismo.
+  const IDEMPOTENCY_TTL_MS = 30 * 60 * 1000;
+
   const idempotencyRef = useRef<{ signature: string; key: string } | null>(null);
 
   const getIdempotencyKey = (signature: string): string => {
     if (idempotencyRef.current?.signature === signature) {
       return idempotencyRef.current.key;
     }
+
+    // Recuperamos la clave de un intento anterior de esta misma sesión.
+    try {
+      const raw = sessionStorage.getItem(IDEMPOTENCY_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { signature: string; key: string; ts: number };
+        if (saved.signature === signature && Date.now() - saved.ts < IDEMPOTENCY_TTL_MS) {
+          idempotencyRef.current = { signature, key: saved.key };
+          return saved.key;
+        }
+      }
+    } catch {
+      /* sessionStorage no disponible — seguimos con una clave nueva */
+    }
+
     const key =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     idempotencyRef.current = { signature, key };
+    try {
+      sessionStorage.setItem(
+        IDEMPOTENCY_STORAGE_KEY,
+        JSON.stringify({ signature, key, ts: Date.now() })
+      );
+    } catch {
+      /* ignore */
+    }
     return key;
   };
 
@@ -276,6 +318,7 @@ export default function CheckoutForm({
           type="submit"
           fullWidth
           loading={isSubmitting}
+          disabled={!hydrated}
           className="text-base py-4"
         >
           {isSubmitting ? "Procesando..." : (
