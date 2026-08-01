@@ -10,14 +10,20 @@ import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
 import { COUPON_CODES } from "@/lib/coupons";
+import { VARIANT_IDS, PRINCIPAL_FALLBACK_PRICE } from "@/lib/catalog";
 
+// Último recurso: solo se usa si Shopify no respondió y el servidor no pudo
+// resolver el producto principal. Lleva shopifyVariantId para que, incluso en
+// ese caso, el pedido quede enlazado al producto real y descuente inventario.
+// El nombre y la variante replican los de Shopify a propósito.
 const DEFAULT_ITEM: OrderItem = {
   id: "prod_001",
-  name: "Probióticos Vaginales",
-  variant: "x60 unidades",
-  price: 110000,
+  name: "Alimento con probióticos y prebióticos x 60 UND",
+  variant: "Compra Única 1 / 1 unidad",
+  price: PRINCIPAL_FALLBACK_PRICE,
   quantity: 1,
   image: "https://images.unsplash.com/photo-1593095948071-474c5cc2989d?w=200&q=80",
+  shopifyVariantId: VARIANT_IDS.principal,
 };
 
 function shopifyProductToItem(p: CheckoutProduct, variantId?: number): OrderItem {
@@ -35,7 +41,10 @@ function shopifyProductToItem(p: CheckoutProduct, variantId?: number): OrderItem
   };
 }
 
-// Base upsell catalog — Gomitas is filled in dynamically from Shopify
+// Catálogo base de upsells — Gomitas se completa desde Shopify.
+// Cada uno trae su shopifyVariantId de respaldo: si la consulta a Shopify
+// falla, el upsell sigue enlazado al producto real en vez de entrar como
+// línea suelta sin inventario.
 const BASE_UPSELLS: UpsellProduct[] = [
   {
     id: "jabon-intimo-fem",
@@ -47,6 +56,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
     stock: 7,
     soldToday: 14,
     shopifyHandle: "jabon-intimo-fem",
+    shopifyVariantId: VARIANT_IDS.jabon,
   },
   {
     id: "ovulos-fem",
@@ -58,6 +68,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
     stock: 5,
     soldToday: 9,
     shopifyHandle: "ovulos-fem",
+    shopifyVariantId: VARIANT_IDS.ovulos,
   },
   {
     id: "gomitas-pms",
@@ -69,6 +80,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
     stock: 8,
     soldToday: 11,
     shopifyHandle: "gomitas-sindrome-premestrual-x60",
+    shopifyVariantId: VARIANT_IDS.gomitas,
   },
 ];
 
@@ -130,20 +142,22 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   // ── Upsell catalog: fill data from Shopify + filter main product ─────────
   const UPSELL_PRODUCTS = useMemo<UpsellProduct[]>(() => {
     const filled = BASE_UPSELLS.map((p) => {
+      // `?? p.shopifyVariantId` conserva el respaldo: un producto de Shopify
+      // sin variantes no debe borrar el enlace que ya traíamos.
       if (p.id === "gomitas-pms" && gomitasProduct) {
         const v = gomitasProduct.variants[0];
         return {
           ...p,
           price: Math.round(parseFloat(v?.price ?? "0")),
           image: gomitasProduct.images[0]?.src ?? p.image,
-          shopifyVariantId: v?.id,
+          shopifyVariantId: v?.id ?? p.shopifyVariantId,
         };
       }
       if (p.id === "jabon-intimo-fem" && jabonProduct) {
-        return { ...p, shopifyVariantId: jabonProduct.variants[0]?.id };
+        return { ...p, shopifyVariantId: jabonProduct.variants[0]?.id ?? p.shopifyVariantId };
       }
       if (p.id === "ovulos-fem" && ovulosProduct) {
-        return { ...p, shopifyVariantId: ovulosProduct.variants[0]?.id };
+        return { ...p, shopifyVariantId: ovulosProduct.variants[0]?.id ?? p.shopifyVariantId };
       }
       return p;
     });

@@ -1,3 +1,5 @@
+import { sendAlert } from "./alert";
+
 // ── Data sanitizers ────────────────────────────────────────────────────────────────────
 function stripEmojis(str: string): string {
   // Extended_Pictographic covers all emoji-capable symbols (incl. geometric shapes like ▪ U+25AA)
@@ -227,6 +229,18 @@ export async function createShopifyOrder(
   input: ShopifyOrderInput
 ): Promise<number> {
   const isPaid = input.paymentMethod === "mercadopago";
+
+  // Un item sin variant_id entra a Shopify como línea suelta: no descuenta
+  // inventario, no suma al reporte del producto y no se puede devolver contra
+  // el SKU. Antes pasaba en silencio; ahora queda registrado y avisa.
+  const unlinked = input.items.filter((i) => !i.shopifyVariantId);
+  if (unlinked.length > 0) {
+    const detail = unlinked.map((i) => `${i.name}${i.variant ? ` – ${i.variant}` : ""}`).join(", ");
+    console.error(`[Shopify] Items sin variante (${input.femOrderId}): ${detail}`);
+    sendAlert(
+      `⚠️ Pedido ${input.femOrderId}: ${unlinked.length} item(s) sin variante de Shopify — entran sin descontar inventario: ${detail}`
+    ).catch(() => {});
+  }
 
   // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
   const sanitized = sanitizeEmail(input.email);
