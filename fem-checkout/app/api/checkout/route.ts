@@ -172,14 +172,25 @@ export async function POST(req: NextRequest) {
     const desde = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString();
     const { data: mismoContenido } = await supabase
       .from("orders")
-      .select("id")
+      .select("id, payment_status")
       .eq("content_hash", huella)
       .gte("created_at", desde)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (mismoContenido) {
+    // Nunca reutilizar un pedido de Mercado Pago que ya quedó pagado: el
+    // webhook solo crea la orden en Shopify si aún no existe, así que la
+    // clienta terminaría pagando dos veces y recibiendo un solo envío. Si ya
+    // pagó y vuelve a pagar, es una compra nueva de verdad.
+    //
+    // Contraentrega no tiene ese riesgo — no hay cobro — y es justamente donde
+    // aparecían los duplicados, así que ahí sí se deduplica siempre.
+    const yaPagado =
+      body.paymentMethod === "mercadopago" &&
+      mismoContenido?.payment_status === "approved";
+
+    if (mismoContenido && !yaPagado) {
       orderId = mismoContenido.id;
       reusedExisting = true;
       console.log(`[Checkout] Pedido idéntico reciente → reutilizando orden ${orderId}`);

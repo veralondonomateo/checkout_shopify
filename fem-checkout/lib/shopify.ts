@@ -222,6 +222,25 @@ export async function getProducts(): Promise<ShopifyProduct[]> {
   return all;
 }
 
+/**
+ * Consulta un handle sin pasar por caché.
+ *
+ * El catálogo se sirve con 5 minutos de caché. Eso está bien para pintar el
+ * checkout, pero no para declarar que un producto "no existe": un producto
+ * recién creado, o recién republicado, no aparecería hasta que expire la
+ * caché, y sus links mostrarían "no disponible" sin serlo. Esta consulta se
+ * usa solo antes de dar ese veredicto, así que cuesta una llamada extra
+ * únicamente en el camino de error.
+ */
+export async function getProductByHandleFresh(
+  handle: string
+): Promise<ShopifyProduct | null> {
+  const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
+    `/products.json?handle=${encodeURIComponent(handle)}&limit=1&status=active&fields=id,title,handle,status,variants,images`
+  );
+  return data.products[0] ?? null;
+}
+
 export async function getProductByHandle(
   handle: string
 ): Promise<ShopifyProduct | null> {

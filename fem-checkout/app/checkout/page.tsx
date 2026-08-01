@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
 import CheckoutHeader from "@/components/checkout/CheckoutHeader";
-import { getProducts, getProductByHandle, ShopifyProduct } from "@/lib/shopify";
+import { getProducts, getProductByHandle, getProductByHandleFresh, ShopifyProduct } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
 import { VARIANT_IDS } from "@/lib/catalog";
 
@@ -104,6 +104,14 @@ export default async function CheckoutPage({
   const catalogoDisponible = allProducts.length > 0;
   let resolvedVariantId = initialVariantId;
   let handleInexistente: string | null = null;
+
+  if (!shopifyProduct) {
+    if (product && catalogoDisponible) {
+      // Antes de declarar que no existe, preguntamos sin caché: puede ser un
+      // producto recién creado que el catálogo cacheado todavía no ve.
+      shopifyProduct = await getProductByHandleFresh(product).catch(() => null);
+    }
+  }
 
   if (!shopifyProduct) {
     if (product && catalogoDisponible) {
