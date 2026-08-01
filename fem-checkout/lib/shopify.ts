@@ -59,10 +59,10 @@ const API_VERSION = "2024-10";
  * pagaba una ida y vuelta completa a la Admin API antes del primer byte.
  * Las escrituras (órdenes) siguen sin caché.
  */
-async function shopifyFetch<T>(
+async function shopifyFetchWithHeaders<T>(
   path: string,
   options?: RequestInit & { revalidate?: number }
-): Promise<T> {
+): Promise<{ data: T; headers: Headers }> {
   const token = await getAccessToken();
   const url = `https://${process.env.SHOPIFY_DOMAIN}/admin/api/${API_VERSION}${path}`;
   const { revalidate, ...init } = options ?? {};
@@ -81,7 +81,30 @@ async function shopifyFetch<T>(
     const text = await res.text();
     throw new Error(`Shopify API ${res.status}: ${text}`);
   }
-  return res.json();
+  return { data: (await res.json()) as T, headers: res.headers };
+}
+
+async function shopifyFetch<T>(
+  path: string,
+  options?: RequestInit & { revalidate?: number }
+): Promise<T> {
+  const { data } = await shopifyFetchWithHeaders<T>(path, options);
+  return data;
+}
+
+/**
+ * Extrae el cursor `page_info` de la siguiente página del header `Link`.
+ * Shopify pagina así en REST: `<...page_info=XYZ>; rel="next"`.
+ */
+function nextPageInfo(headers: Headers): string | null {
+  const link = headers.get("link") ?? headers.get("Link");
+  if (!link) return null;
+  for (const part of link.split(",")) {
+    if (!part.includes('rel="next"')) continue;
+    const match = part.match(/[?&]page_info=([^&>]+)/);
+    if (match) return match[1];
+  }
+  return null;
 }
 
 // ── GraphQL client ─────────────────────────────────────────────────────────────
@@ -172,12 +195,33 @@ export async function findProductBySku(
 /** TTL del catálogo en el Data Cache de Next (precios/stock cambian poco). */
 export const PRODUCTS_REVALIDATE = 300;
 
+/** Tope de páginas: 250 productos cada una. Evita un bucle infinito si el
+ *  header `Link` viniera mal formado. */
+const MAX_PRODUCT_PAGES = 20;
+
 export async function getProducts(): Promise<ShopifyProduct[]> {
-  const data = await shopifyFetch<{ products: ShopifyProduct[] }>(
-    "/products.json?limit=250&status=active&fields=id,title,handle,status,variants,images",
-    { revalidate: PRODUCTS_REVALIDATE }
-  );
-  return data.products;
+  const FIELDS = "id,title,handle,status,variants,images";
+  const all: ShopifyProduct[] = [];
+  let path = `/products.json?limit=250&status=active&fields=${FIELDS}`;
+
+  // Antes se pedía una sola página de 250: con el catálogo por encima de ese
+  // número, los productos sobrantes simplemente no existían para el checkout
+  // ni para el admin, y sus links caían a "no disponible" sin razón.
+  for (let page = 0; page < MAX_PRODUCT_PAGES; page++) {
+    const { data, headers } = await shopifyFetchWithHeaders<{ products: ShopifyProduct[] }>(
+      path,
+      { revalidate: PRODUCTS_REVALIDATE }
+    );
+    all.push(...data.products);
+
+    const pageInfo = nextPageInfo(headers);
+    if (!pageInfo) return all;
+    // Con page_info, Shopify solo admite `limit` y `fields` como acompañantes.
+    path = `/products.json?limit=250&fields=${FIELDS}&page_info=${pageInfo}`;
+  }
+
+  console.warn(`[Shopify] getProducts cortó en ${MAX_PRODUCT_PAGES} páginas (${all.length} productos)`);
+  return all;
 }
 
 export async function getProductByHandle(

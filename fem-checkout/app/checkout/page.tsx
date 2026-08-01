@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
+import CheckoutHeader from "@/components/checkout/CheckoutHeader";
 import { getProducts, getProductByHandle, ShopifyProduct } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
 import { VARIANT_IDS } from "@/lib/catalog";
@@ -22,6 +23,44 @@ function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
  * visitas: sin esto, cada una mandaría su propio mensaje a Slack.
  */
 const alertedHandles = new Set<string>();
+
+/**
+ * Pantalla para un link que apunta a un producto que ya no existe.
+ *
+ * A propósito no vende el producto principal en su lugar: sustituir en
+ * silencio genera pedidos de algo que el cliente nunca pidió, y ese descuadre
+ * lo termina pagando la operación logística. Ofrecemos el catálogo para que
+ * la decisión sea del cliente.
+ */
+function ProductoNoDisponible() {
+  return (
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
+      <CheckoutHeader />
+      <main className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="bg-white rounded-lg border border-gray-200 p-8 max-w-md w-full text-center">
+          <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-5">
+            <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 005 19z" />
+            </svg>
+          </div>
+          <h1 className="text-lg font-bold text-gray-900 mb-2">
+            Este producto ya no está disponible
+          </h1>
+          <p className="text-sm text-gray-500 mb-6">
+            El enlace que abriste corresponde a un producto que ya no tenemos en
+            venta. Puedes continuar con nuestro producto principal.
+          </p>
+          <a
+            href="/checkout"
+            className="inline-block w-full bg-gray-900 text-white text-sm font-medium rounded-md py-3 hover:bg-gray-800 transition-colors"
+          >
+            Ver producto disponible
+          </a>
+        </div>
+      </main>
+    </div>
+  );
+}
 
 export const metadata = {
   title: "FEM | Finalizar compra",
@@ -58,25 +97,42 @@ export default async function CheckoutPage({
     }
   }
 
-  // Sin producto resuelto, el checkout caía a un item hardcodeado sin variante
-  // de Shopify: el pedido llegaba como línea suelta, sin descontar inventario
-  // ni sumar al reporte del producto. Resolvemos el principal por ID de
-  // variante para que quede enlazado igual que cualquier otro.
+  // Qué hacer cuando no hay producto resuelto depende de por qué no lo hay:
+  //
+  // - Sin `?product=`: es el link genérico. Mostramos el producto principal,
+  //   resuelto por ID de variante para que el pedido quede enlazado (antes
+  //   caía a un item hardcodeado sin variante y entraba a Shopify suelto).
+  // - Con `?product=` que no existe en el catálogo: NO lo reemplazamos por
+  //   otro producto. Despachar algo distinto a lo anunciado rompe la logística
+  //   y deja al cliente con un pedido que no pidió. Mejor decir la verdad.
+  // - Con `?product=` pero el catálogo vino vacío: Shopify no respondió. No
+  //   podemos distinguir "no existe" de "no pude preguntar", así que caemos al
+  //   principal en vez de tumbar todas las ventas durante una caída.
+  const catalogoDisponible = allProducts.length > 0;
   let resolvedVariantId = initialVariantId;
+  let handleInexistente: string | null = null;
+
   if (!shopifyProduct) {
-    if (product) {
-      // El link traía un handle que ya no existe (producto renombrado o
-      // archivado). Avisamos: es un link de pauta apuntando al vacío.
-      console.error(`[Checkout] Handle "${product}" no resolvió — cayendo al producto principal`);
+    if (product && catalogoDisponible) {
+      handleInexistente = product;
+      console.error(`[Checkout] Handle "${product}" no existe en Shopify — mostrando "no disponible"`);
       if (!alertedHandles.has(product)) {
         alertedHandles.add(product);
         sendAlert(
-          `⚠️ Checkout: el handle "${product}" no existe en Shopify. Se está mostrando el producto principal.`
+          `🔴 Link roto en pauta: el producto "${product}" no existe en Shopify. El checkout está mostrando "no disponible" — revisa la campaña.`
         ).catch(() => {});
       }
+    } else {
+      if (product) {
+        console.error(`[Checkout] Catálogo vacío (Shopify no respondió) — cayendo al principal para "${product}"`);
+      }
+      shopifyProduct = findByVariantId(VARIANT_IDS.principal);
+      if (shopifyProduct) resolvedVariantId = VARIANT_IDS.principal;
     }
-    shopifyProduct = findByVariantId(VARIANT_IDS.principal);
-    if (shopifyProduct) resolvedVariantId = VARIANT_IDS.principal;
+  }
+
+  if (handleInexistente) {
+    return <ProductoNoDisponible />;
   }
 
   function findByTitle(pattern: RegExp): ShopifyProduct | null {

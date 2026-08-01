@@ -8,6 +8,7 @@ interface ShopifyVariant {
   id: number;
   title: string;
   price: string;
+  inventory_quantity?: number;
 }
 
 interface ShopifyProduct {
@@ -77,6 +78,7 @@ export default function AdminClient() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [descartados, setDescartados] = useState(0);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +97,12 @@ export default function AdminClient() {
         return;
       }
       const data = await res.json();
-      setProducts(data.products);
+      // Un producto sin variantes no se puede comprar: su link generaría un
+      // pedido imposible de despachar. Se excluye en vez de mostrarse roto.
+      const todos: ShopifyProduct[] = data.products ?? [];
+      const vendibles = todos.filter((p) => p.variants.length > 0);
+      setDescartados(todos.length - vendibles.length);
+      setProducts(vendibles);
       setAuthenticated(true);
     } catch {
       setError("Error de conexión");
@@ -172,7 +179,19 @@ export default function AdminClient() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <h1 className="text-lg font-bold text-gray-900 mb-1">Links de checkout</h1>
-        <p className="text-xs text-gray-400 mb-6">Cada producto tiene link para 1 und y 2 und. Precios desde Shopify.</p>
+        <p className="text-xs text-gray-400 mb-2">
+          Cada producto tiene link para 1 und y 2 und. Precios y stock desde Shopify.
+        </p>
+        <p className="text-xs text-gray-400 mb-6">
+          Solo aparecen productos activos y comprables.
+          {descartados > 0 && (
+            <span className="text-amber-600">
+              {" "}
+              Se ocultaron {descartados} producto{descartados === 1 ? "" : "s"} sin
+              variantes: no se pueden vender.
+            </span>
+          )}
+        </p>
 
         {products.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
@@ -182,6 +201,15 @@ export default function AdminClient() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {products.map((product) => {
               const { link1, link2 } = getQuantityLinks(product);
+              // `inventory_quantity` puede venir ausente si Shopify no rastrea
+              // el inventario de esa variante: en ese caso no afirmamos que no
+              // hay stock, porque se vende igual.
+              const conDatosDeStock = product.variants.some(
+                (v) => typeof v.inventory_quantity === "number"
+              );
+              const sinStock =
+                conDatosDeStock &&
+                product.variants.every((v) => (v.inventory_quantity ?? 0) <= 0);
 
               return (
                 <div
@@ -209,9 +237,15 @@ export default function AdminClient() {
 
                   {/* Info */}
                   <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-3 line-clamp-2">
+                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-2 line-clamp-2">
                       {product.title}
                     </h3>
+
+                    {sinStock && (
+                      <span className="inline-block mb-2 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                        Sin stock en Shopify
+                      </span>
+                    )}
 
                     {/* 1 unidad */}
                     <LinkRow
