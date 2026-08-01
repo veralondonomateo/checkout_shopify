@@ -4,7 +4,6 @@ import CheckoutHeader from "@/components/checkout/CheckoutHeader";
 import { getProducts, getProductByHandle, ShopifyProduct } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
 import { VARIANT_IDS } from "@/lib/catalog";
-import { sendAlert } from "@/lib/alert";
 
 /** Reduce el producto a lo que el cliente realmente renderiza. */
 function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
@@ -17,12 +16,6 @@ function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
     images: p.images.slice(0, 1).map((i) => ({ src: i.src })),
   };
 }
-
-/**
- * Handles rotos ya avisados. Un link de pauta mal apuntado recibe miles de
- * visitas: sin esto, cada una mandaría su propio mensaje a Slack.
- */
-const alertedHandles = new Set<string>();
 
 /**
  * Pantalla para un link que apunta a un producto que ya no existe.
@@ -115,13 +108,10 @@ export default async function CheckoutPage({
   if (!shopifyProduct) {
     if (product && catalogoDisponible) {
       handleInexistente = product;
-      console.error(`[Checkout] Handle "${product}" no existe en Shopify — mostrando "no disponible"`);
-      if (!alertedHandles.has(product)) {
-        alertedHandles.add(product);
-        sendAlert(
-          `🔴 Link roto en pauta: el producto "${product}" no existe en Shopify. El checkout está mostrando "no disponible" — revisa la campaña.`
-        ).catch(() => {});
-      }
+      // Queda en los logs de Vercel, que es donde sí se puede consultar.
+      console.error(
+        `[LINK-ROTO] El producto "${product}" no existe en Shopify — el checkout mostró "no disponible"`
+      );
     } else {
       if (product) {
         console.error(`[Checkout] Catálogo vacío (Shopify no respondió) — cayendo al principal para "${product}"`);

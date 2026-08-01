@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
@@ -36,6 +37,35 @@ interface CheckoutBody {
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutfem.com";
+
+/**
+ * Ventana en la que dos pedidos con el mismo contenido se consideran el mismo
+ * intento. Coincide con el TTL de la clave de idempotencia del navegador.
+ */
+const DEDUP_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Huella del contenido del pedido, calculada en el servidor.
+ *
+ * La clave de idempotencia la genera el navegador y vive en `sessionStorage`,
+ * que es **por pestaña**: si la clienta vuelve a abrir el link desde WhatsApp
+ * o Instagram, recibe una clave nueva y su pedido entra otra vez. Esta huella
+ * no depende del navegador, así que atrapa ese caso.
+ */
+function contentHash(body: CheckoutBody): string {
+  const items = body.items
+    .map((i) => `${i.shopifyVariantId ?? i.id}:${i.quantity}:${i.price}`)
+    .sort()
+    .join("|");
+  const base = [
+    body.email.trim().toLowerCase(),
+    body.phone.replace(/\D/g, ""),
+    body.paymentMethod,
+    Math.round(body.total),
+    items,
+  ].join("~");
+  return createHash("sha256").update(base).digest("hex");
+}
 
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
@@ -117,6 +147,7 @@ export async function POST(req: NextRequest) {
   // nuevo — así un doble clic o un reintento tras un corte de red no se
   // convierte en dos órdenes en Shopify.
   const idempotencyKey = body.idempotencyKey?.trim() || null;
+  const huella = contentHash(body);
   let orderId: string | null = null;
   let reusedExisting = false;
 
@@ -131,6 +162,27 @@ export async function POST(req: NextRequest) {
       orderId = existing.id;
       reusedExisting = true;
       console.log(`[Checkout] Intento repetido (${idempotencyKey}) → reutilizando orden ${orderId}`);
+    }
+  }
+
+  // Segunda red: mismo contenido en los últimos 30 minutos. Atrapa el caso que
+  // la clave de idempotencia no puede ver, porque esa vive en sessionStorage y
+  // no cruza pestañas ni dispositivos.
+  if (!orderId) {
+    const desde = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString();
+    const { data: mismoContenido } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("content_hash", huella)
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (mismoContenido) {
+      orderId = mismoContenido.id;
+      reusedExisting = true;
+      console.log(`[Checkout] Pedido idéntico reciente → reutilizando orden ${orderId}`);
     }
   }
 
@@ -156,6 +208,7 @@ export async function POST(req: NextRequest) {
       coupon_code: body.couponCode ? body.couponCode.trim().toUpperCase() : null,
       total: body.total,
       idempotency_key: idempotencyKey,
+      content_hash: huella,
     })
     .select("id")
     .single();

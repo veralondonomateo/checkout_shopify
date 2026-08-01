@@ -55,7 +55,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
     benefit: "Higiene íntima con pH balanceado",
     stock: 7,
     soldToday: 14,
-    shopifyHandle: "jabon-intimo-fem",
+    shopifyHandle: "jabon-intimo-ph-neutro",
     shopifyVariantId: VARIANT_IDS.jabon,
   },
   {
@@ -67,7 +67,7 @@ const BASE_UPSELLS: UpsellProduct[] = [
     benefit: "Restaura la flora vaginal naturalmente",
     stock: 5,
     soldToday: 9,
-    shopifyHandle: "ovulos-fem",
+    shopifyHandle: "ovulos-vaginales-fem",
     shopifyVariantId: VARIANT_IDS.ovulos,
   },
   {
@@ -102,6 +102,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   const MAIN_ITEMS: OrderItem[] = shopifyProduct
     ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
     : [DEFAULT_ITEM];
+  const mainVariantId = MAIN_ITEMS[0]?.shopifyVariantId;
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
   const [mainQty, setMainQty] = useState(initialQty ?? 1);
@@ -161,12 +162,21 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       }
       return p;
     });
+    // No ofrecer como upsell lo que la clienta ya está comprando.
+    //
+    // Antes esto se comparaba solo por handle, y los handles escritos a mano
+    // aquí no coincidían con los reales de Shopify ("jabon-intimo-fem" vs
+    // "jabon-intimo-ph-neutro"): el filtro nunca se activaba y el mismo
+    // producto se podía comprar dos veces en un mismo pedido, a dos precios
+    // distintos. Ahora manda el ID de variante, que es el dato que Shopify
+    // realmente usa; el handle queda como respaldo.
     return filled.filter((p) => {
+      if (mainVariantId && p.shopifyVariantId === mainVariantId) return false;
       if (p.shopifyHandle === shopifyProduct?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
       return true;
     });
-  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, mainVariantId]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>

@@ -1,5 +1,3 @@
-import { sendAlert } from "./alert";
-
 // ── Data sanitizers ────────────────────────────────────────────────────────────────────
 function stripEmojis(str: string): string {
   // Extended_Pictographic covers all emoji-capable symbols (incl. geometric shapes like ▪ U+25AA)
@@ -280,10 +278,7 @@ export async function createShopifyOrder(
   const unlinked = input.items.filter((i) => !i.shopifyVariantId);
   if (unlinked.length > 0) {
     const detail = unlinked.map((i) => `${i.name}${i.variant ? ` – ${i.variant}` : ""}`).join(", ");
-    console.error(`[Shopify] Items sin variante (${input.femOrderId}): ${detail}`);
-    sendAlert(
-      `⚠️ Pedido ${input.femOrderId}: ${unlinked.length} item(s) sin variante de Shopify — entran sin descontar inventario: ${detail}`
-    ).catch(() => {});
+    console.error(`[ITEM-SUELTO] Pedido ${input.femOrderId}: ${detail}`);
   }
 
   // Sanitize all text fields — the new Shopify API rejects emojis and malformed emails
