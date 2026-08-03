@@ -5,6 +5,7 @@ import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
 import { sendPurchaseEvent } from "@/lib/meta";
 import { COUPON_CODES, COUPON_USAGE_LIMITS } from "@/lib/coupons";
+import { soloPagoAnticipado, MENSAJE_SOLO_PAGO_ANTICIPADO } from "@/lib/zonas-pago-anticipado";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN!,
@@ -85,9 +86,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Método de pago inválido" }, { status: 400 });
   }
 
-  // Ciudades de difícil acceso: solo pago anticipado
-  if (body.paymentMethod === "contraentrega" && body.state === "Vichada" && body.city === "Puerto Carreño") {
-    return NextResponse.json({ error: "Pago contra entrega no disponible para Puerto Carreño" }, { status: 400 });
+  // Ciudades donde el costo de envío hace inviable el contra entrega. El
+  // checkout ya esconde la opción, pero esta es la validación que manda: el
+  // navegador puede mentir.
+  if (body.paymentMethod === "contraentrega" && soloPagoAnticipado(body.state, body.city)) {
+    return NextResponse.json({ error: MENSAJE_SOLO_PAGO_ANTICIPADO }, { status: 400 });
   }
 
   // Validate coupon and compute discount server-side — never trust client-sent amounts

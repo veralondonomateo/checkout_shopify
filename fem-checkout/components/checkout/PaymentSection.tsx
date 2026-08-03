@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useWatch, UseFormRegister, FieldErrors, UseFormWatch, UseFormSetValue, Control } from "react-hook-form";
 import { CheckoutFormData } from "@/types/checkout";
+import { soloPagoAnticipado } from "@/lib/zonas-pago-anticipado";
 
 interface PaymentSectionProps {
   register: UseFormRegister<CheckoutFormData>;
@@ -18,7 +19,10 @@ export default function PaymentSection({ register, errors, watch, control, setVa
   // useWatch creates proper React subscriptions in THIS component (not just in the useForm owner)
   const watchedState = useWatch({ control, name: "state" });
   const watchedCity = useWatch({ control, name: "city" });
-  const isRestrictedCity = watchedState === "Vichada" && watchedCity === "Puerto Carreño";
+  // La lista vive en lib/zonas-pago-anticipado y la comparte el servidor, que
+  // vuelve a rechazar el contra entrega. Antes esta condición estaba escrita en
+  // duro con una sola ciudad.
+  const isRestrictedCity = soloPagoAnticipado(watchedState ?? "", watchedCity ?? "");
 
   useEffect(() => {
     if (isRestrictedCity && selectedMethod === "contraentrega") {
@@ -84,7 +88,7 @@ export default function PaymentSection({ register, errors, watch, control, setVa
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p className="text-xs text-amber-800 leading-relaxed">
-            <span className="font-semibold">Por la distancia a tu ciudad</span>, el pago contra entrega no está disponible para Puerto Carreño. Puedes completar tu pedido pagando de forma anticipada — ¡te lo enviamos igual con todo el amor! 💛
+            <span className="font-semibold">Por la distancia a tu ciudad</span>, el pago contra entrega no está disponible para {watchedCity}. Puedes completar tu pedido pagando de forma anticipada — ¡te lo enviamos igual con todo el amor! 💛
           </p>
         </div>
       )}
