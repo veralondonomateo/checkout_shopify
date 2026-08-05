@@ -34,6 +34,8 @@ interface CheckoutBody {
   discount?: number;
   /** Clave estable por intento de compra — evita pedidos duplicados. */
   idempotencyKey?: string;
+  /** Sesión de seguimiento de carrito, para cerrarla al comprar. */
+  sessionId?: string;
 }
 
 const APP_URL =
@@ -283,6 +285,24 @@ export async function POST(req: NextRequest) {
       // No bloqueamos — la orden ya existe, los items se pueden recuperar
       console.error("Supabase items insert error:", itemsError);
     }
+  }
+
+  // ── 2b. Cerrar la sesión de seguimiento ──────────────────────────────────
+  // Quien envía el pedido deja de ser un carrito abandonado. Va sin `await` y
+  // con el error tragado: es un dato de marketing y no puede demorar ni
+  // tumbar una compra que ya está confirmada.
+  if (body.sessionId) {
+    supabase
+      .from("checkout_sessions")
+      .update({ converted_at: new Date().toISOString(), order_id: orderId })
+      .eq("session_id", body.sessionId)
+      .is("converted_at", null)
+      .then(
+        ({ error }) => {
+          if (error) console.error("[Checkout] No se pudo cerrar la sesión:", error);
+        },
+        () => {}
+      );
   }
 
   // ── 3. Contraentrega: solo guardar en Supabase, NO crear en Shopify aún ──

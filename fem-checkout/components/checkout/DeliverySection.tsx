@@ -122,6 +122,19 @@ export default function DeliverySection({ register, errors, watch, setValue }: D
     [cities]
   );
 
+  // Ciudad precargada (link de recuperación): cuando el valor llega antes que
+  // las opciones, el <select> no tiene todavía ese <option> y se queda vacío
+  // aunque el formulario sí lo tenga. Al llegar la lista, se reescribe en el
+  // DOM. Si la ciudad no está en el departamento, se limpia en vez de dejar
+  // un valor fantasma que el usuario no ve.
+  const selectedCity = watch("city");
+  useEffect(() => {
+    if (!selectedCity || cities.length === 0) return;
+    setValue("city", cities.includes(selectedCity) ? selectedCity : "", {
+      shouldValidate: false,
+    });
+  }, [cities, selectedCity, setValue]);
+
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setValue("state", e.target.value, { shouldValidate: true });
     setValue("city", "", { shouldValidate: false });

@@ -13,6 +13,7 @@ import UpsellSection from "./UpsellSection";
 import PaymentSection from "./PaymentSection";
 import Button from "@/components/ui/Button";
 import { trackStartedCheckout } from "@/lib/klaviyo";
+import { useSeguimientoCarrito } from "./useSeguimientoCarrito";
 
 const schema = z.object({
   // Require a valid email — phone numbers break Mercado Pago's payer.email
@@ -162,6 +163,47 @@ export default function CheckoutForm({
     },
   });
 
+  // Recuperación de carritos: guarda lo que se va llenando para poder escribir
+  // por WhatsApp a quien se va sin comprar. Es un camino lateral — no toca el
+  // envío del pedido ni puede bloquearlo.
+  const sessionIdRef = useSeguimientoCarrito({
+    watch: watch as never,
+    items: allItems,
+    subtotal,
+    total,
+    coupon,
+  });
+
+  // Link "termina tu compra" del mensaje de recuperación: `?r=<token>` trae
+  // los datos que la clienta ya había escrito para que no los repita.
+  //
+  // Se lee de `window.location` y no con useSearchParams a propósito: así este
+  // efecto no obliga al formulario a entrar en Suspense ni cambia el render
+  // del servidor. Si algo falla, el checkout queda en blanco como siempre.
+  useEffect(() => {
+    let cancelado = false;
+    const token = new URLSearchParams(window.location.search).get("r");
+    if (!token) return;
+
+    fetch(`/api/checkout/recuperar?t=${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((datos) => {
+        if (cancelado || !datos?.ok) return;
+        // Campo por campo y no con `reset`: los inputs no son controlados, y
+        // `setValue` es el único que además escribe el valor en el DOM.
+        for (const [campo, valor] of Object.entries(datos.cliente)) {
+          if (typeof valor === "string" && valor) {
+            setValue(campo as keyof FormData, valor, { shouldValidate: false });
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelado = true;
+    };
+  }, [setValue]);
+
 
   // Fire Klaviyo "Started Checkout" as soon as a valid email is entered (on blur),
   // capturing shoppers who abandon before paying. identify re-runs on correction;
@@ -210,6 +252,9 @@ export default function CheckoutForm({
           couponCode: coupon || undefined,
           discount: discount || undefined,
           idempotencyKey: getIdempotencyKey(signature),
+          // Cierra la sesión de seguimiento: quien compra deja de ser un
+          // carrito abandonado en el mismo momento en que envía el pedido.
+          sessionId: sessionIdRef.current || undefined,
         }),
       });
 
