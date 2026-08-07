@@ -15,12 +15,17 @@ export const COUPON_CODES: Record<string, number> = {
   AIDA: 0.2,
   NEW10: 0.1,
   QUIEROFEM: 0.1,
+  // Exclusivo de la recuperación de carritos por WhatsApp. Va aparte de FEM10
+  // para poder medir cuántas ventas trajo esa operación y poder apagarlo sin
+  // tocar los cupones que se usan en otros canales.
+  VUELVE10: 0.1,
 };
 
 /** Máximo de usos por cliente (email). Sin entrada aquí = sin límite. */
 export const COUPON_USAGE_LIMITS: Record<string, number> = {
   NEW10: 1,
   QUIEROFEM: 2,
+  VUELVE10: 1,
 };
 
 /** Normaliza como se guarda en la base: sin espacios y en mayúsculas. */

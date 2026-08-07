@@ -120,8 +120,16 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   }, []);
 
   // ── Coupon state (shared between form and order summary) ──────────────────
-  const [coupon, setCoupon] = useState("");
-  const [couponApplied, setCouponApplied] = useState(false);
+  //
+  // `?cupon=` viene de los links de recuperación (/r/<token>): el descuento
+  // llega ya aplicado para que la clienta no tenga que escribir el código.
+  // Solo se acepta si existe en la tabla; el servidor lo revalida igual, así
+  // que un código inventado en la URL no descuenta nada.
+  const cuponUrl = searchParams.get("cupon")?.trim().toUpperCase() ?? "";
+  const cuponUrlValido = COUPON_CODES[cuponUrl] !== undefined ? cuponUrl : "";
+
+  const [coupon, setCoupon] = useState(cuponUrlValido);
+  const [couponApplied, setCouponApplied] = useState(Boolean(cuponUrlValido));
   const [couponError, setCouponError] = useState("");
 
   const handleApplyCoupon = () => {

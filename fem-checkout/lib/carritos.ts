@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCouponRate } from "@/lib/coupons";
 
 /**
  * Recuperación de carritos abandonados.
@@ -24,6 +25,19 @@ const PREFIJO: Record<TipoCarrito, string> = {
   pago_no_completado: "o",
   datos_parciales: "s",
 };
+
+/**
+ * El descuento viaja dentro del token (prefijo `od`/`sd`), no como parámetro
+ * suelto en la URL.
+ *
+ * Así el link con descuento sigue siendo **una sola cadena** —lo que Meta
+ * necesita para el botón de URL dinámica— y, como la firma cubre el prefijo,
+ * nadie puede convertir un link normal en uno con descuento sin el secreto.
+ */
+const SUFIJO_DESCUENTO = "d";
+
+/** Cupón que aplican los links de recuperación. Debe existir en lib/coupons. */
+export const CUPON_RECUPERACION = process.env.CUPON_RECUPERACION ?? "VUELVE10";
 
 /**
  * Minutos de inactividad antes de considerar abandonado un carrito.
@@ -78,17 +92,21 @@ function firmar(payload: string): string {
  * enumere UUIDs y se traiga los datos de otras clientas: sin el secreto no se
  * puede fabricar un token válido.
  */
-export function crearToken(tipo: TipoCarrito, id: string): string {
-  const base = `${PREFIJO[tipo]}.${id}`;
+export function crearToken(tipo: TipoCarrito, id: string, conDescuento = false): string {
+  const base = `${PREFIJO[tipo]}${conDescuento ? SUFIJO_DESCUENTO : ""}.${id}`;
   return `${base}.${firmar(base)}`;
 }
 
-export function verificarToken(token: string): { tipo: TipoCarrito; id: string } | null {
+export function verificarToken(
+  token: string
+): { tipo: TipoCarrito; id: string; conDescuento: boolean } | null {
   const partes = token.split(".");
   if (partes.length !== 3) return null;
   const [prefijo, id, firma] = partes;
 
-  const tipo = (Object.keys(PREFIJO) as TipoCarrito[]).find((t) => PREFIJO[t] === prefijo);
+  const conDescuento = prefijo.endsWith(SUFIJO_DESCUENTO);
+  const base = conDescuento ? prefijo.slice(0, -1) : prefijo;
+  const tipo = (Object.keys(PREFIJO) as TipoCarrito[]).find((t) => PREFIJO[t] === base);
   if (!tipo) return null;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
 
@@ -99,23 +117,24 @@ export function verificarToken(token: string): { tipo: TipoCarrito; id: string }
   const b = Buffer.from(esperada);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
 
-  return { tipo, id };
+  return { tipo, id, conDescuento };
 }
 
 /**
- * Link que reabre el checkout con todo precargado. Lleva variante y cantidad
- * por los mismos parámetros que ya usa el checkout, así el carrito se arma por
- * el camino de siempre.
+ * Link corto de "termina tu compra": `/r/<token>`.
+ *
+ * Corto a propósito. En WhatsApp el link se ve entero en el chat y, sobre todo,
+ * el botón de URL dinámica de Meta lleva una sola variable
+ * (`checkoutfem.com/r/{{1}}`) en vez de una cadena con `&` adentro, que da
+ * fricción en la revisión. La variante, la cantidad y el cupón los resuelve
+ * `/r/[token]` contra la base y los pasa al checkout.
  */
 export function linkRecuperacion(
   tipo: TipoCarrito,
   id: string,
-  opciones?: { variantId?: number | null; qty?: number | null }
+  conDescuento = false
 ): string {
-  const params = new URLSearchParams({ r: crearToken(tipo, id) });
-  if (opciones?.variantId) params.set("variant", String(opciones.variantId));
-  if (opciones?.qty && opciones.qty > 1) params.set("qty", String(opciones.qty));
-  return `${APP_URL}/checkout?${params.toString()}`;
+  return `${APP_URL}/r/${crearToken(tipo, id, conDescuento)}`;
 }
 
 // ── Supresión ───────────────────────────────────────────────────────────────
@@ -183,6 +202,12 @@ export interface CarritoCRM {
   productos: ProductoCarrito[];
   total: number;
   link_recuperacion: string;
+  /** El mismo link, pero deja el cupón de recuperación ya aplicado. */
+  link_recuperacion_descuento: string;
+  /** Código del cupón que aplica ese link, para nombrarlo en el mensaje. */
+  cupon_descuento: string;
+  /** Porcentaje de ese cupón (10 = 10 %). */
+  descuento_porcentaje: number;
   detectado_at: string;
   contactar_desde: string;
   mensajes_enviados: number;
@@ -238,10 +263,10 @@ export function armarCarrito(
     departamento: origen.departamento,
     productos: origen.productos,
     total: origen.total,
-    link_recuperacion: linkRecuperacion(fila.tipo, fila.origen_id, {
-      variantId: origen.variantId,
-      qty: origen.qty,
-    }),
+    link_recuperacion: linkRecuperacion(fila.tipo, fila.origen_id),
+    link_recuperacion_descuento: linkRecuperacion(fila.tipo, fila.origen_id, true),
+    cupon_descuento: CUPON_RECUPERACION,
+    descuento_porcentaje: Math.round((getCouponRate(CUPON_RECUPERACION) ?? 0) * 100),
     detectado_at: fila.detectado_at,
     contactar_desde: contactarDesde.toISOString(),
     mensajes_enviados: fila.mensajes_enviados,

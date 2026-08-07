@@ -244,7 +244,10 @@ Se marca recuperado  ◄───────────────┘  POST .
         }
       ],
       "total": 110000,
-      "link_recuperacion": "${BASE}/checkout?r=o.352801fb-...&variant=43659069325400",
+      "link_recuperacion": "${BASE}/r/o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc",
+      "link_recuperacion_descuento": "${BASE}/r/od.352801fb-a3c7-44a1-8f5d-023e2912f181.4a91b7e2c0f5d8a36b14",
+      "cupon_descuento": "VUELVE10",
+      "descuento_porcentaje": 10,
       "detectado_at": "2026-08-04T19:45:20.047Z",
       "contactar_desde": "2026-08-04T20:30:20.047Z",
       "mensajes_enviados": 0,
@@ -265,6 +268,9 @@ Se marca recuperado  ◄───────────────┘  POST .
                 [<code key="3" className="text-xs">telefono</code>, "Celular en formato internacional (+57…), listo para WhatsApp."],
                 [<code key="4" className="text-xs">telefono_local</code>, "Los mismos 10 dígitos sin indicativo, por si el CRM los prefiere así."],
                 [<code key="5" className="text-xs">link_recuperacion</code>, "Link para terminar la compra, con los datos y el producto ya cargados."],
+                [<code key="5b" className="text-xs">link_recuperacion_descuento</code>, "El mismo link, pero además deja el cupón aplicado. Úsalo solo en el mensaje donde ofrezcas el descuento."],
+                [<code key="5c" className="text-xs">cupon_descuento</code>, "Código de ese cupón, por si quieres nombrarlo en el mensaje."],
+                [<code key="5d" className="text-xs">descuento_porcentaje</code>, "Cuánto descuenta (10 = 10 %)."],
                 [<code key="6" className="text-xs">contactar_desde</code>, "Momento a partir del cual conviene enviar el primer mensaje (detección + 45 min)."],
                 [<code key="7" className="text-xs">debe_contactar</code>, "Si es false, no envíes nada. En esta lista viene del estado guardado; el valor en vivo está en el endpoint de detalle."],
                 [<code key="8" className="text-xs">hay_mas</code>, "true si quedan más carritos por leer: vuelve a llamar con el nuevo cursor."],
@@ -384,12 +390,36 @@ function firmaValida(cuerpoCrudo, cabeceras, secreto) {
               abre el checkout con el producto correcto y los datos que la clienta ya había escrito
               (nombre, celular, dirección, ciudad). No tiene que volver a llenar nada.
             </p>
-            <Codigo>{`${BASE}/checkout?r=o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc&variant=43659069325400`}</Codigo>
+            <Codigo>{`${BASE}/r/o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc`}</Codigo>
             <p className="text-gray-600 leading-relaxed">
               El token va firmado, así que nadie puede fabricar uno para ver los datos de otra
               persona, y caduca a los 30 días. <strong>Manda el link tal como viene</strong>: si lo
-              cortas o le quitas parámetros, deja de funcionar.
+              cortas, deja de funcionar. La variante, la cantidad y el cupón los resuelve el propio
+              link al abrirse.
             </p>
+
+            <h3 className="font-semibold text-gray-900 mt-6 mb-2">Con descuento</h3>
+            <p className="text-gray-600 leading-relaxed">
+              <code className="text-sm bg-gray-100 px-1.5 py-0.5 rounded">link_recuperacion_descuento</code>{" "}
+              es el mismo link pero con el cupón ya aplicado: la clienta ve el descuento en pantalla
+              sin escribir ningún código. Es un token distinto y firmado aparte —{" "}
+              <strong>nadie puede convertir un link normal en uno con descuento</strong> — así que
+              el descuento solo llega a quien tú se lo mandes.
+            </p>
+            <Aviso tipo="alerta">
+              Úsalo solo en el mensaje donde realmente ofreces el descuento. Si mandas siempre el
+              link con cupón, estás regalando margen a gente que iba a comprar de todos modos.
+            </Aviso>
+
+            <h3 className="font-semibold text-gray-900 mt-6 mb-2">En la plantilla de Meta</h3>
+            <p className="text-gray-600 leading-relaxed">
+              El link es corto y de una sola pieza justamente para el botón de URL dinámica, que
+              aprueba más fácil que meter el link como variable dentro del texto:
+            </p>
+            <Codigo>{`URL del botón:  ${BASE}/r/{{1}}
+Variable {{1}}: o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc
+
+(el token es lo que va después de /r/ en el link que devuelve la API)`}</Codigo>
             <Aviso>
               Cada carrito tiene su propio link. No reutilices el de una clienta con otra.
             </Aviso>
@@ -504,6 +534,7 @@ async function enviarMensaje(carritoId) {
                 [<code key="6" className="text-xs">CARRITO_VENTANA_HORAS</code>, "Antigüedad máxima de un carrito para encolarlo.", "24"],
                 [<code key="7" className="text-xs">CRM_ESPERA_MIN</code>, "Espera que se refleja en contactar_desde.", "45"],
                 [<code key="8" className="text-xs">RECUPERACION_VIGENCIA_DIAS</code>, "Días que sirve un link de recuperación.", "30"],
+                [<code key="9" className="text-xs">CUPON_RECUPERACION</code>, "Cupón que aplica el link con descuento.", "VUELVE10 (10 %)"],
               ]}
             />
           </Seccion>
