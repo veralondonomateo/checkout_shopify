@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { OrderItem } from "@/types/checkout";
+import { VARIANT_IDS } from "@/lib/catalog";
 
 interface StoredOrder {
   firstName: string;
@@ -14,6 +15,20 @@ interface StoredOrder {
   total: number;
   paymentMethod: "mercadopago" | "contraentrega";
 }
+
+/**
+ * Precio del jabón en el upsell post-compra.
+ *
+ * El precio tachado es el que el jabón cuesta de verdad en el checkout
+ * (29.900). Antes decía 39.000, un precio al que no se vende en ningún lado:
+ * una clienta que hubiera visto los dos precios el mismo día se daba cuenta, y
+ * un descuento que no se sostiene hace dudar de todo lo demás.
+ */
+const UPSELL_PRECIO = 19900;
+const UPSELL_PRECIO_LISTA = 29900;
+const UPSELL_DESCUENTO = Math.round(
+  (1 - UPSELL_PRECIO / UPSELL_PRECIO_LISTA) * 100
+);
 
 function formatCOP(n: number) {
   return new Intl.NumberFormat("es-CO", {
@@ -124,6 +139,21 @@ export default function ThankYouClient() {
   const finalizedRef = useRef(false);
 
   const orderId = searchParams.get("order_id");
+
+  /**
+   * ¿El pedido ya lleva jabón?
+   *
+   * Ofrecérselo otra vez —y a 19.900 cuando acaba de pagarlo a 29.900— es lo
+   * que genera reclamos: la clienta recibe dos jabones y descubre que el
+   * segundo valía diez mil menos. Pasó en 303 pedidos desde abril.
+   *
+   * Cubre también los combos que ya incluyen jabón, porque el mensaje del
+   * upsell dice "hay un espacito para un jabón" y no tiene sentido cuando ya
+   * va uno dentro.
+   */
+  const yaLlevaJabon = (order?.items ?? []).some(
+    (i) => i.shopifyVariantId === VARIANT_IDS.jabon || /jab[oó]n/i.test(i.name)
+  );
   const isFailure = status === "failure";
   const isPending = status === "pending";
   // Contraentrega: no payment_id in URL; MP: has payment_id
@@ -177,6 +207,14 @@ export default function ThankYouClient() {
   useEffect(() => {
     if (!orderId || !isContraentrega) return;
 
+    // Si no hay upsell que mostrar no hay decisión que esperar: la orden se va
+    // a Shopify de una vez en lugar de quedarse 45 s esperando un clic que
+    // nunca va a llegar. El timer y el beacon siguen montados como respaldo
+    // por si esta llamada falla (todo el camino es idempotente).
+    if (order && yaLlevaJabon) {
+      triggerFinalize(orderId, finalizedRef);
+    }
+
     // sendBeacon para cuando el usuario cierra la pestaña
     const beaconFinalize = () => {
       if (finalizedRef.current) return; // ya finalizó vía interacción del usuario
@@ -197,12 +235,15 @@ export default function ThankYouClient() {
 
     // Fallback: si el usuario no interactúa en 45s, crear la orden igual
     const timer = setTimeout(() => triggerFinalize(orderId, finalizedRef), 45_000);
-    window.addEventListener("beforeunload", beaconFinalize);
+    // `pagehide` y no `beforeunload`: en Safari de iPhone —de donde viene buena
+    // parte del tráfico— `beforeunload` no dispara al cerrar la pestaña, y el
+    // pedido se quedaba esperando al cron de rescate hasta 10 minutos.
+    window.addEventListener("pagehide", beaconFinalize);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener("beforeunload", beaconFinalize);
+      window.removeEventListener("pagehide", beaconFinalize);
     };
-  }, [orderId, isContraentrega]);
+  }, [orderId, isContraentrega, order, yaLlevaJabon]);
 
   const handleUpsell = async () => {
     if (!orderId || upsellAdded || upsellLoading) return;
@@ -332,7 +373,7 @@ export default function ThankYouClient() {
             </div>
 
             {/* ── POST-PURCHASE UPSELL (solo contraentrega) ── */}
-            {order?.paymentMethod === "contraentrega" && !upsellDismissed && (
+            {order?.paymentMethod === "contraentrega" && !upsellDismissed && !yaLlevaJabon && (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {/* Foto del equipo */}
                 <div className="relative w-full aspect-[3/2] sm:aspect-[16/7]">
@@ -388,10 +429,10 @@ export default function ThankYouClient() {
                             Jabón Íntimo con Prebióticos
                           </p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="text-sm font-bold text-gray-900">{formatCOP(19900)}</span>
-                            <span className="text-xs text-gray-400 line-through">{formatCOP(39000)}</span>
+                            <span className="text-sm font-bold text-gray-900">{formatCOP(UPSELL_PRECIO)}</span>
+                            <span className="text-xs text-gray-400 line-through">{formatCOP(UPSELL_PRECIO_LISTA)}</span>
                             <span className="text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-1.5 py-0.5 rounded">
-                              -49%
+                              -{UPSELL_DESCUENTO}%
                             </span>
                           </div>
                         </div>

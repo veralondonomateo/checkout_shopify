@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { findProductBySku, findProductByTitle, addLineItemToShopifyOrder } from "@/lib/shopify";
+import { VARIANT_IDS } from "@/lib/catalog";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
@@ -36,6 +37,28 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (existing) {
+    return NextResponse.json({ ok: true, already: true });
+  }
+
+  // El pedido ya trae jabón — suelto o dentro de un combo.
+  //
+  // La página de gracias ya no muestra la oferta en ese caso, pero esta es la
+  // validación que manda: el navegador arma esa condición con lo que tiene en
+  // sessionStorage, que puede venir de otra pestaña o de un pedido anterior.
+  // Sin esta guarda la clienta acaba con dos jabones y descubriendo que el
+  // segundo costaba diez mil menos.
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("name, shopify_variant_id")
+    .eq("order_id", order_id);
+
+  const yaLlevaJabon = (items ?? []).some(
+    (i) =>
+      i.shopify_variant_id === VARIANT_IDS.jabon || /jab[oó]n/i.test(i.name ?? "")
+  );
+
+  if (yaLlevaJabon) {
+    console.log(`[Upsell] Orden ${order_id} ya lleva jabón — no se añade otro`);
     return NextResponse.json({ ok: true, already: true });
   }
 
