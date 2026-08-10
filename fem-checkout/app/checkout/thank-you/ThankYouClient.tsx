@@ -141,18 +141,21 @@ export default function ThankYouClient() {
   const orderId = searchParams.get("order_id");
 
   /**
-   * ¿El pedido ya lleva jabón?
+   * ¿El pedido ya trae el jabón **suelto**?
    *
-   * Ofrecérselo otra vez —y a 19.900 cuando acaba de pagarlo a 29.900— es lo
-   * que genera reclamos: la clienta recibe dos jabones y descubre que el
-   * segundo valía diez mil menos. Pasó en 303 pedidos desde abril.
+   * Ese es el caso que genera reclamos: lo acaba de pagar a 29.900 en el
+   * checkout y en esta página se lo ofrecen a 19.900. Recibe dos y descubre
+   * que el segundo valía diez mil menos (303 pedidos desde abril).
    *
-   * Cubre también los combos que ya incluyen jabón, porque el mensaje del
-   * upsell dice "hay un espacito para un jabón" y no tiene sentido cuando ya
-   * va uno dentro.
+   * Los combos que lo incluyen quedan fuera a propósito. Llevan "jabón" en el
+   * nombre pero son 2 de cada 3 pedidos contraentrega: bloquearlos hundió los
+   * upsells de 8 al día a 1. Ahí el jabón adicional es una segunda unidad a
+   * mitad de precio, no el mismo producto cobrado dos veces.
    */
   const yaLlevaJabon = (order?.items ?? []).some(
-    (i) => i.shopifyVariantId === VARIANT_IDS.jabon || /jab[oó]n/i.test(i.name)
+    (i) =>
+      i.shopifyVariantId === VARIANT_IDS.jabon ||
+      (/jab[oó]n/i.test(i.name) && !/combo|\+/i.test(i.name))
   );
   const isFailure = status === "failure";
   const isPending = status === "pending";

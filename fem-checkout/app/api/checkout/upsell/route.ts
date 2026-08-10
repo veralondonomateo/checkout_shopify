@@ -40,13 +40,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, already: true });
   }
 
-  // El pedido ya trae jabón — suelto o dentro de un combo.
+  // El pedido ya trae el jabón suelto.
   //
   // La página de gracias ya no muestra la oferta en ese caso, pero esta es la
   // validación que manda: el navegador arma esa condición con lo que tiene en
   // sessionStorage, que puede venir de otra pestaña o de un pedido anterior.
   // Sin esta guarda la clienta acaba con dos jabones y descubriendo que el
   // segundo costaba diez mil menos.
+  //
+  // Los combos que incluyen jabón no cuentan: son 2 de cada 3 pedidos
+  // contraentrega, y ahí el jabón extra es una segunda unidad con descuento.
   const { data: items } = await supabase
     .from("order_items")
     .select("name, shopify_variant_id")
@@ -54,7 +57,8 @@ export async function POST(req: NextRequest) {
 
   const yaLlevaJabon = (items ?? []).some(
     (i) =>
-      i.shopify_variant_id === VARIANT_IDS.jabon || /jab[oó]n/i.test(i.name ?? "")
+      i.shopify_variant_id === VARIANT_IDS.jabon ||
+      (/jab[oó]n/i.test(i.name ?? "") && !/combo|\+/i.test(i.name ?? ""))
   );
 
   if (yaLlevaJabon) {
