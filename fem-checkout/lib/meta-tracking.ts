@@ -51,16 +51,26 @@ export function asegurarIdsMeta(): { fbp?: string; fbc?: string } {
   if (typeof window === "undefined") return {};
 
   try {
+    const params = new URLSearchParams(window.location.search);
+
     let fbc = leerCookie("_fbc");
     if (!fbc) {
-      const fbclid = new URLSearchParams(window.location.search).get("fbclid");
-      if (fbclid) {
+      // `?fbc=` es el identificador ya armado que puede pasarnos la landing.
+      // Hace falta porque vive en otro dominio: su cookie `_fbc` no llega
+      // hasta aquí, y sin esto la visita pierde el rastro del anuncio.
+      const heredado = params.get("fbc");
+      const fbclid = params.get("fbclid");
+      if (heredado?.startsWith("fb.")) {
+        fbc = heredado;
+        escribirCookie("_fbc", fbc);
+      } else if (fbclid) {
         fbc = `fb.1.${Date.now()}.${fbclid}`;
         escribirCookie("_fbc", fbc);
       }
     }
 
-    let fbp = leerCookie("_fbp");
+    let fbp = leerCookie("_fbp") ?? params.get("fbp") ?? null;
+    if (fbp && !leerCookie("_fbp")) escribirCookie("_fbp", fbp);
     if (!fbp) {
       const aleatorio = Math.floor(Math.random() * 9_000_000_000) + 1_000_000_000;
       fbp = `fb.1.${Date.now()}.${aleatorio}`;
