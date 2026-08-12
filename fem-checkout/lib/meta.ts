@@ -26,6 +26,26 @@ interface PurchaseEventInput {
   clientUserAgent?: string;
   fbp?: string;          // _fbp cookie
   fbc?: string;          // _fbc cookie
+  // Los siguientes ya están en la orden y suben la calidad de coincidencia
+  // (EMQ) sin costo: cada uno es una señal más para que Meta empareje el
+  // evento con una persona real.
+  firstName?: string;
+  lastName?: string;
+  city?: string;
+  state?: string;
+}
+
+/**
+ * Meta pide ciudad y región sin espacios, acentos ni puntuación, en minúscula:
+ * "Bogotá D.C." → "bogotadc". Sin esta normalización el hash no coincide con
+ * el suyo y el dato no suma nada.
+ */
+function normalizeGeo(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z]/g, "")
+    .toLowerCase();
 }
 
 export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void> {
@@ -36,8 +56,18 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
 
   const userData: Record<string, unknown> = {
     em: [sha256(input.email)],
+    // Identificador estable de la compradora. Meta lo usa para unir eventos de
+    // la misma persona aunque falten cookies, que es justo lo que pasa con los
+    // pedidos de Mercado Pago.
+    external_id: [sha256(input.email)],
   };
   if (input.phone) userData.ph = [hashPhone(input.phone)];
+  if (input.firstName) userData.fn = [sha256(input.firstName)];
+  if (input.lastName) userData.ln = [sha256(input.lastName)];
+  if (input.city) userData.ct = [sha256(normalizeGeo(input.city))];
+  if (input.state) userData.st = [sha256(normalizeGeo(input.state))];
+  // Toda la operación es Colombia; el país es una señal más, y gratis.
+  userData.country = [sha256("co")];
   if (input.clientIp) userData.client_ip_address = input.clientIp;
   if (input.clientUserAgent) userData.client_user_agent = input.clientUserAgent;
   if (input.fbp) userData.fbp = input.fbp;

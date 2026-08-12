@@ -255,6 +255,11 @@ export default function CheckoutForm({
           // Cierra la sesión de seguimiento: quien compra deja de ser un
           // carrito abandonado en el mismo momento en que envía el pedido.
           sessionId: sessionIdRef.current || undefined,
+          // Atribución de Meta. El `fbclid` va por si el pixel todavía no
+          // alcanzó a crear la cookie `_fbc`: sin él, una compra rápida desde
+          // un anuncio se queda sin atribuir.
+          eventSourceUrl: window.location.href,
+          fbclid: new URLSearchParams(window.location.search).get("fbclid") ?? undefined,
         }),
       });
 

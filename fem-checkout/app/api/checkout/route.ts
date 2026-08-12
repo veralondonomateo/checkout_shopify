@@ -36,6 +36,10 @@ interface CheckoutBody {
   idempotencyKey?: string;
   /** Sesión de seguimiento de carrito, para cerrarla al comprar. */
   sessionId?: string;
+  /** URL del checkout, para el evento de Meta. */
+  eventSourceUrl?: string;
+  /** `fbclid` de la URL, por si el pixel aún no creó la cookie `_fbc`. */
+  fbclid?: string;
 }
 
 const APP_URL =
@@ -146,6 +150,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "El descuento no puede ser mayor o igual al subtotal" }, { status: 400 });
   }
 
+  // Datos de atribución de Meta, tomados de la petición del navegador.
+  //
+  // `_fbc` la crea el pixel al aterrizar con `?fbclid=`, pero el pixel carga
+  // diferido: si la clienta llega y compra rápido, la cookie todavía no
+  // existe. En ese caso la reconstruimos con el formato que Meta espera
+  // (`fb.1.<timestamp>.<fbclid>`) para no perder la atribución del anuncio.
+  const fbcCookie = req.cookies.get("_fbc")?.value;
+  const atribucion = {
+    fbp: req.cookies.get("_fbp")?.value,
+    fbc:
+      fbcCookie ??
+      (body.fbclid ? `fb.1.${Date.now()}.${body.fbclid}` : undefined),
+    clientIp: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? undefined,
+    clientUserAgent: req.headers.get("user-agent") ?? undefined,
+    eventSourceUrl: body.eventSourceUrl,
+  };
+
   // ── 1. Insertar la orden (siempre, antes de cualquier redirect) ──────────
   // Idempotencia: el cliente manda una clave estable por intento de compra.
   // Si esa clave ya existe reutilizamos la fila en vez de crear un pedido
@@ -225,6 +246,14 @@ export async function POST(req: NextRequest) {
       total: body.total,
       idempotency_key: idempotencyKey,
       content_hash: huella,
+      // Atribución de Meta. Este es el único momento en que existen: el
+      // Purchase de Mercado Pago sale del webhook, que lo llama el servidor de
+      // MP y no ve ni cookies ni IP de la clienta.
+      fbp: atribucion.fbp ?? null,
+      fbc: atribucion.fbc ?? null,
+      client_ip: atribucion.clientIp ?? null,
+      client_user_agent: atribucion.clientUserAgent ?? null,
+      event_source_url: atribucion.eventSourceUrl ?? null,
     })
     .select("id")
     .single();
@@ -318,10 +347,11 @@ export async function POST(req: NextRequest) {
         email: body.email,
         phone: body.phone,
         value: body.total,
-        clientIp: req.headers.get("x-forwarded-for")?.split(",")[0] ?? undefined,
-        clientUserAgent: req.headers.get("user-agent") ?? undefined,
-        fbp: req.cookies.get("_fbp")?.value,
-        fbc: req.cookies.get("_fbc")?.value,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        city: body.city,
+        state: body.state,
+        ...atribucion,
       }).catch(() => {});
     }
 

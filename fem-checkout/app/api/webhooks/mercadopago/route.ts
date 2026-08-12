@@ -111,9 +111,15 @@ export async function POST(req: NextRequest) {
 
     // Conversions API: Purchase cuando MP confirma el pago
     if (status === "approved") {
+      // Los datos de atribución se guardaron al crear el pedido: aquí no hay
+      // cookies ni IP de la clienta, porque quien llama es el servidor de
+      // Mercado Pago. Sin recuperarlos, la mitad de las ventas llegaba a Meta
+      // solo con email y teléfono.
       const { data: orderForMeta } = await supabase
         .from("orders")
-        .select("email, phone, total")
+        .select(
+          "email, phone, total, first_name, last_name, city, state, fbp, fbc, client_ip, client_user_agent, event_source_url"
+        )
         .eq("id", orderId)
         .single();
       if (orderForMeta) {
@@ -122,6 +128,15 @@ export async function POST(req: NextRequest) {
           email: orderForMeta.email,
           phone: orderForMeta.phone,
           value: orderForMeta.total,
+          firstName: orderForMeta.first_name ?? undefined,
+          lastName: orderForMeta.last_name ?? undefined,
+          city: orderForMeta.city ?? undefined,
+          state: orderForMeta.state ?? undefined,
+          fbp: orderForMeta.fbp ?? undefined,
+          fbc: orderForMeta.fbc ?? undefined,
+          clientIp: orderForMeta.client_ip ?? undefined,
+          clientUserAgent: orderForMeta.client_user_agent ?? undefined,
+          eventSourceUrl: orderForMeta.event_source_url ?? undefined,
         }).catch(() => {});
       }
     }
