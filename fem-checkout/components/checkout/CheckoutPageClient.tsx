@@ -9,6 +9,7 @@ import CheckoutForm from "./CheckoutForm";
 import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
+import { asegurarIdsMeta } from "@/lib/meta-tracking";
 import { COUPON_CODES } from "@/lib/coupons";
 import { VARIANT_IDS, PRINCIPAL_FALLBACK_PRICE } from "@/lib/catalog";
 
@@ -111,6 +112,11 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   // Disparar InitiateCheckout al cargar la página. Los pixeles ahora cargan
   // diferidos, así que esperamos a que existan en vez de descartar el evento.
   useEffect(() => {
+    // Antes que nada: fijar los identificadores de Meta. El `fbclid` solo está
+    // en la URL de la primera visita, y si la clienta navega antes de comprar
+    // se pierde para siempre.
+    asegurarIdsMeta();
+
     const cancelMeta = trackMeta("InitiateCheckout");
     const cancelTikTok = trackTikTok("InitiateCheckout");
     return () => {

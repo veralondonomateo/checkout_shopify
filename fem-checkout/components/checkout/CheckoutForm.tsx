@@ -14,6 +14,7 @@ import PaymentSection from "./PaymentSection";
 import Button from "@/components/ui/Button";
 import { trackStartedCheckout } from "@/lib/klaviyo";
 import { useSeguimientoCarrito } from "./useSeguimientoCarrito";
+import { asegurarIdsMeta } from "@/lib/meta-tracking";
 
 const schema = z.object({
   // Require a valid email — phone numbers break Mercado Pago's payer.email
@@ -260,6 +261,10 @@ export default function CheckoutForm({
           // un anuncio se queda sin atribuir.
           eventSourceUrl: window.location.href,
           fbclid: new URLSearchParams(window.location.search).get("fbclid") ?? undefined,
+          // Van también en el cuerpo, no solo como cookie: si el navegador
+          // bloquea cookies de terceros o el pixel no las creó, esto es lo
+          // único que le llega al servidor.
+          ...asegurarIdsMeta(),
         }),
       });
 

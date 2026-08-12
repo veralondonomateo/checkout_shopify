@@ -40,6 +40,9 @@ interface CheckoutBody {
   eventSourceUrl?: string;
   /** `fbclid` de la URL, por si el pixel aún no creó la cookie `_fbc`. */
   fbclid?: string;
+  /** Identificadores de Meta que arma el navegador (ver lib/meta-tracking). */
+  fbp?: string;
+  fbc?: string;
 }
 
 const APP_URL =
@@ -156,9 +159,12 @@ export async function POST(req: NextRequest) {
   // diferido: si la clienta llega y compra rápido, la cookie todavía no
   // existe. En ese caso la reconstruimos con el formato que Meta espera
   // (`fb.1.<timestamp>.<fbclid>`) para no perder la atribución del anuncio.
-  const fbcCookie = req.cookies.get("_fbc")?.value;
+  // El cuerpo va primero que la cookie: el pixel de FEM no está escribiendo
+  // `_fbp` ni `_fbc` (cookies propias desactivadas en el Events Manager), así
+  // que lo que manda el navegador es la fuente fiable.
+  const fbcCookie = body.fbc ?? req.cookies.get("_fbc")?.value;
   const atribucion = {
-    fbp: req.cookies.get("_fbp")?.value,
+    fbp: body.fbp ?? req.cookies.get("_fbp")?.value,
     fbc:
       fbcCookie ??
       (body.fbclid ? `fb.1.${Date.now()}.${body.fbclid}` : undefined),
