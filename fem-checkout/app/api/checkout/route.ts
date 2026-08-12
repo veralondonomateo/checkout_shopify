@@ -351,6 +351,11 @@ export async function POST(req: NextRequest) {
         lastName: body.lastName,
         city: body.city,
         state: body.state,
+        contents: body.items.map((i) => ({
+          id: String(i.shopifyVariantId ?? i.id),
+          quantity: i.quantity,
+          price: i.price,
+        })),
         ...atribucion,
       }).catch(() => {});
     }

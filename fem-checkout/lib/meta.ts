@@ -33,6 +33,8 @@ interface PurchaseEventInput {
   lastName?: string;
   city?: string;
   state?: string;
+  /** Líneas del pedido — alimentan el catálogo y los anuncios dinámicos. */
+  contents?: Array<{ id: string; quantity: number; price: number }>;
 }
 
 /**
@@ -86,6 +88,17 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
           currency: input.currency ?? "COP",
           value: input.value,
           order_id: input.orderId,
+          ...(input.contents?.length
+            ? {
+                content_type: "product",
+                content_ids: input.contents.map((c) => c.id),
+                contents: input.contents.map((c) => ({
+                  id: c.id,
+                  quantity: c.quantity,
+                  item_price: c.price,
+                })),
+              }
+            : {}),
         },
       },
     ],
@@ -101,11 +114,23 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
         body: JSON.stringify(payload),
       }
     );
+    const cuerpo = await res.text();
     if (!res.ok) {
-      const text = await res.text();
-      console.error("[Meta CAPI] Error:", text);
-    } else {
-      console.log(`[Meta CAPI] Purchase event sent for order ${input.orderId}`);
+      console.error("[Meta CAPI] Error:", cuerpo);
+      return;
+    }
+
+    // La respuesta de Meta es lo único que confirma que el evento entró, y el
+    // `fbtrace_id` es lo que pide su soporte para rastrear un evento concreto.
+    // Sin esto, un evento descartado en silencio no deja rastro en ningún lado.
+    try {
+      const { events_received, fbtrace_id } = JSON.parse(cuerpo);
+      console.log(
+        `[Meta CAPI] Purchase ${input.orderId} — recibidos: ${events_received}, ` +
+          `parámetros: ${Object.keys(userData).length}, fbtrace: ${fbtrace_id}`
+      );
+    } catch {
+      console.log(`[Meta CAPI] Purchase ${input.orderId} enviado`);
     }
   } catch (err) {
     // No-fatal: nunca bloquear el flujo de pago por un error de tracking

@@ -172,9 +172,29 @@ export default function ThankYouClient() {
         // Purchase pixel (navegador) — se deduplica con CAPI por event_id
         if (orderId && !isFailure && !isPending && typeof window !== "undefined") {
           if ((window as any).fbq) {
+            // Coincidencias avanzadas manuales: sin esto el pixel solo manda lo
+            // que logra deducir solo, y Meta reportaba datos completos en el
+            // 44 % de las compras. El navegador hashea estos valores antes de
+            // enviarlos; nunca viajan en claro.
+            (window as any).fbq("init", "1382746760142604", {
+              em: parsed.email?.trim().toLowerCase(),
+              fn: parsed.firstName?.trim().toLowerCase(),
+              ln: parsed.lastName?.trim().toLowerCase(),
+              country: "co",
+            });
+
             (window as any).fbq("track", "Purchase", {
               value: parsed.total,
               currency: "COP",
+              content_type: "product",
+              content_ids: parsed.items.map((i: OrderItem) =>
+                String(i.shopifyVariantId ?? i.id)
+              ),
+              contents: parsed.items.map((i: OrderItem) => ({
+                id: String(i.shopifyVariantId ?? i.id),
+                quantity: i.quantity,
+                item_price: i.price,
+              })),
             }, { eventID: `purchase_${orderId}` });
           }
           if ((window as any).ttq) {

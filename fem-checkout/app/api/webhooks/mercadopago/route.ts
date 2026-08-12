@@ -115,16 +115,44 @@ export async function POST(req: NextRequest) {
       // cookies ni IP de la clienta, porque quien llama es el servidor de
       // Mercado Pago. Sin recuperarlos, la mitad de las ventas llegaba a Meta
       // solo con email y teléfono.
-      const { data: orderForMeta } = await supabase
+      // Idempotencia: Mercado Pago reintenta sus webhooks. `capi_sent_at` se
+      // reclama de forma atómica —solo gana quien lo encuentre en null— así que
+      // dos entregas del mismo aviso no mandan dos compras a Meta.
+      const { data: reclamado } = await supabase
         .from("orders")
-        .select(
-          "email, phone, total, first_name, last_name, city, state, fbp, fbc, client_ip, client_user_agent, event_source_url"
-        )
+        .update({ capi_sent_at: new Date().toISOString() })
         .eq("id", orderId)
-        .single();
+        .is("capi_sent_at", null)
+        .select("id")
+        .maybeSingle();
+
+      const { data: orderForMeta } = reclamado
+        ? await supabase
+            .from("orders")
+            .select(
+              "email, phone, total, first_name, last_name, city, state, fbp, fbc, client_ip, client_user_agent, event_source_url"
+            )
+            .eq("id", orderId)
+            .single()
+        : { data: null };
+
+      if (!reclamado) {
+        console.log(`[MP Webhook] Purchase de ${orderId} ya se envió a Meta — omitido`);
+      }
+
       if (orderForMeta) {
+        const { data: lineas } = await supabase
+          .from("order_items")
+          .select("product_id, quantity, price, shopify_variant_id")
+          .eq("order_id", orderId);
+
         sendPurchaseEvent({
           orderId,
+          contents: (lineas ?? []).map((l) => ({
+            id: String(l.shopify_variant_id ?? l.product_id),
+            quantity: l.quantity,
+            price: Number(l.price),
+          })),
           email: orderForMeta.email,
           phone: orderForMeta.phone,
           value: orderForMeta.total,
