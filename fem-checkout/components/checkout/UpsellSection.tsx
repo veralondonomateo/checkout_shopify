@@ -37,9 +37,9 @@ export default function UpsellSection({ products, qty, onToggle }: UpsellSection
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h2 className="font-semibold text-gray-900 text-sm">Añade a tu pedido</h2>
-          <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">
-            Favoritos que combinan con tu compra
+          <h2 className="font-semibold text-gray-900 text-sm">Añade productos extra a tu pedido</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Estos productos tienen un costo adicional y se sumará al valor total de tu compra
           </p>
         </div>
         <span className="flex items-center gap-1 text-[10px] font-semibold text-[#fc5245] bg-[#fc5245]/10 px-2 py-1 rounded">
