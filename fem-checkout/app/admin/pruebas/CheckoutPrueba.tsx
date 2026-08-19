@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { DEPARTMENTS, DEPARTMENT_SLUGS } from "@/data/departments";
 import { coberturaSendura, RESUMEN_COBERTURA } from "@/lib/cobertura-sendura";
+import { DEPARTMENTS, DEPARTMENT_SLUGS } from "@/data/departments";
 
 /**
- * Checkout del entorno de pruebas de Sendura.
+ * Checkout del entorno de pruebas de Sendura, dentro del admin.
  *
  * Deliberadamente NO reutiliza los componentes del checkout real: así ningún
  * ajuste que se haga aquí para probar puede alterar la pantalla por la que
@@ -19,7 +18,6 @@ interface Variante {
   title: string;
   price: string;
   sku?: string;
-  inventory_quantity?: number;
 }
 
 interface Producto {
@@ -78,13 +76,15 @@ async function traerCiudades(departamento: string): Promise<string[]> {
   }
 }
 
-export default function PruebasClient() {
-  const [password, setPassword] = useState("");
-  const [autenticado, setAutenticado] = useState(false);
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [cargando, setCargando] = useState(false);
-  const [errorLogin, setErrorLogin] = useState("");
-
+export default function CheckoutPrueba({
+  productos,
+  onEnviado,
+}: {
+  /** Catálogo resuelto en el servidor: así no queda un endpoint de productos abierto. */
+  productos: Producto[];
+  /** Avisa al módulo para que refresque el registro tras un envío real. */
+  onEnviado?: () => void;
+}) {
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [form, setForm] = useState({
     firstName: "",
@@ -102,32 +102,6 @@ export default function PruebasClient() {
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [verPayload, setVerPayload] = useState(false);
-
-  const entrar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCargando(true);
-    setErrorLogin("");
-    try {
-      const res = await fetch("/api/admin/products", {
-        headers: { "x-admin-password": password },
-      });
-      if (res.status === 401) {
-        setErrorLogin("Contraseña incorrecta");
-        return;
-      }
-      if (!res.ok) {
-        setErrorLogin("No se pudo leer el catálogo de Shopify");
-        return;
-      }
-      const data = await res.json();
-      setProductos((data.products ?? []).filter((p: Producto) => p.variants.length > 0));
-      setAutenticado(true);
-    } catch {
-      setErrorLogin("Error de conexión");
-    } finally {
-      setCargando(false);
-    }
-  };
 
   useEffect(() => {
     if (!form.state) {
@@ -187,7 +161,7 @@ export default function PruebasClient() {
     try {
       const res = await fetch("/api/pruebas/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": password },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
           items: carrito.map((l) => ({
@@ -206,6 +180,7 @@ export default function PruebasClient() {
         return;
       }
       setResultado(data);
+      if (!dryRun) onEnviado?.();
     } catch (err) {
       setResultado({
         carrier: "shopify",
@@ -226,75 +201,23 @@ export default function PruebasClient() {
     form.state &&
     form.city;
 
-  // ── Login ────────────────────────────────────────────────────────────────
-  if (!autenticado) {
-    return (
-      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center px-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 w-full max-w-sm shadow-sm">
-          <div className="text-center mb-6">
-            <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              Entorno de pruebas
-            </span>
-            <p className="text-sm text-gray-500 mt-3">
-              Checkout de integración FEM × Sendura
-            </p>
-          </div>
-          <form onSubmit={entrar} className="space-y-4">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña del admin"
-              className="w-full px-3.5 py-2.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-1 focus:ring-[#fc5245] focus:border-[#fc5245]"
-              autoFocus
-            />
-            {errorLogin && <p className="text-xs text-red-500">{errorLogin}</p>}
-            <button
-              type="submit"
-              disabled={cargando || !password}
-              className="w-full py-2.5 bg-[#fc5245] text-white text-sm font-semibold rounded-md hover:bg-[#e83d30] transition-colors disabled:opacity-50"
-            >
-              {cargando ? "Conectando..." : "Entrar"}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Checkout de prueba ───────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f5f5f5]">
-      <header className="bg-gray-900 text-white sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-400 text-gray-900 rounded px-2 py-1 flex-shrink-0">
-              Pruebas
-            </span>
-            <span className="text-sm font-medium truncate">Integración Sendura</span>
-          </div>
-          <Link href="/admin/pruebas" className="text-xs text-gray-300 hover:text-white flex-shrink-0">
-            Ver registro →
-          </Link>
-        </div>
-      </header>
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+      {/* Catálogo + formulario */}
+      <div className="space-y-6">
+        <section className="bg-white rounded-lg border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-1">1. Productos</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Catálogo completo de Shopify
+            {productos.length > 0 && ` (${productos.length} productos)`}. El SKU es el que se
+            le manda a Sendura: si sale en rojo, ese producto no se puede enviar.
+          </p>
 
-      <div className="bg-amber-50 border-b border-amber-200">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 text-xs text-amber-900">
-          Los pedidos que envíes aquí son <strong>reales</strong> en Sendura y en Shopify —
-          hay que anularlos a mano. No tocan la tabla de ventas, ni Mercado Pago, ni Meta, ni el CRM.
-        </div>
-      </div>
-
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
-        {/* Columna izquierda: catálogo + formulario */}
-        <div className="space-y-6">
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-1">1. Productos</h2>
-            <p className="text-xs text-gray-500 mb-4">
-              Catálogo completo de Shopify ({productos.length} productos). El SKU es el que
-              se le manda a Sendura: si sale en rojo, ese producto no se puede enviar.
+          {productos.length === 0 ? (
+            <p className="text-xs text-red-600">
+              Shopify no devolvió productos. Sin catálogo no se pueden resolver los SKU.
             </p>
+          ) : (
             <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {productos.map((producto) => (
                 <div key={producto.id} className="border border-gray-200 rounded-md p-3">
@@ -327,163 +250,163 @@ export default function PruebasClient() {
                 </div>
               ))}
             </div>
-          </section>
+          )}
+        </section>
 
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">2. Datos de entrega</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Campo label="Nombre" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
-              <Campo label="Apellido" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
-              <Campo label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="opcional" />
-              <Campo label="Celular" value={form.phone} onChange={(v) => setForm({ ...form, phone: v.replace(/\D/g, "") })} />
-              <div className="sm:col-span-2">
-                <Campo label="Dirección" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
-              </div>
-              <div className="sm:col-span-2">
-                <Campo label="Complemento" value={form.complement} onChange={(v) => setForm({ ...form, complement: v })} placeholder="Apto, torre, indicaciones" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Departamento</label>
-                <select
-                  value={form.state}
-                  onChange={(e) => setForm({ ...form, state: e.target.value, city: "" })}
-                  className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#fc5245]"
-                >
-                  <option value="">Selecciona…</option>
-                  {DEPARTMENTS.map((d) => (
-                    <option key={d.slug} value={d.name}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Ciudad {cargandoCiudades && <span className="text-gray-400">(cargando…)</span>}
-                </label>
-                <select
-                  value={form.city}
-                  onChange={(e) => setForm({ ...form, city: e.target.value })}
-                  disabled={!form.state || cargandoCiudades}
-                  className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm bg-white disabled:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[#fc5245]"
-                >
-                  <option value="">Selecciona…</option>
-                  {ciudades.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+        <section className="bg-white rounded-lg border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 mb-4">2. Datos de entrega</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Campo label="Nombre" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} />
+            <Campo label="Apellido" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} />
+            <Campo label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} placeholder="opcional" />
+            <Campo label="Celular" value={form.phone} onChange={(v) => setForm({ ...form, phone: v.replace(/\D/g, "") })} />
+            <div className="sm:col-span-2">
+              <Campo label="Dirección" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+            </div>
+            <div className="sm:col-span-2">
+              <Campo label="Complemento" value={form.complement} onChange={(v) => setForm({ ...form, complement: v })} placeholder="Apto, torre, indicaciones" />
             </div>
 
-            <div className="mt-4">
-              <label className="block text-xs font-medium text-gray-700 mb-1.5">Método de pago</label>
-              <div className="flex gap-2">
-                {([
-                  ["contraentrega", "Contra entrega"],
-                  ["anticipado", "Pago anticipado (simulado)"],
-                ] as const).map(([valor, etiqueta]) => (
-                  <button
-                    key={valor}
-                    onClick={() => setForm({ ...form, paymentMethod: valor })}
-                    className={`flex-1 py-2 rounded-md text-xs font-semibold border transition-colors ${
-                      form.paymentMethod === valor
-                        ? "bg-gray-900 text-white border-gray-900"
-                        : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    {etiqueta}
-                  </button>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Departamento</label>
+              <select
+                value={form.state}
+                onChange={(e) => setForm({ ...form, state: e.target.value, city: "" })}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-[#fc5245]"
+              >
+                <option value="">Selecciona…</option>
+                {DEPARTMENTS.map((d) => (
+                  <option key={d.slug} value={d.name}>{d.name}</option>
                 ))}
-              </div>
-              <p className="text-[11px] text-gray-400 mt-1.5">
-                El pago anticipado no cobra nada: entra como pagado sin pasar por Mercado Pago.
-              </p>
+              </select>
             </div>
-          </section>
-        </div>
 
-        {/* Columna derecha: destino + carrito + envío */}
-        <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <DestinoBanner
-            state={form.state}
-            city={form.city}
-            cubierta={cobertura?.cubierta ?? null}
-            municipio={cobertura?.municipio?.city}
-            corregimiento={cobertura?.corregimiento}
-          />
-
-          <section className="bg-white rounded-lg border border-gray-200 p-5">
-            <h2 className="font-semibold text-gray-900 text-sm mb-3">Pedido</h2>
-            {carrito.length === 0 ? (
-              <p className="text-xs text-gray-400">Aún no has añadido productos.</p>
-            ) : (
-              <div className="space-y-2">
-                {carrito.map((l) => (
-                  <div key={l.shopifyVariantId} className="flex items-center gap-2 text-xs">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-900 font-medium truncate">{l.name}</p>
-                      <p className="text-gray-400 truncate">
-                        {l.variant} · <span className="font-mono">{l.sku || "sin SKU"}</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => cambiarCantidad(l.shopifyVariantId, -1)} className="w-6 h-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">−</button>
-                      <span className="w-6 text-center tabular-nums">{l.quantity}</span>
-                      <button onClick={() => cambiarCantidad(l.shopifyVariantId, 1)} className="w-6 h-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">+</button>
-                    </div>
-                    <span className="w-20 text-right font-semibold text-gray-900 flex-shrink-0">
-                      {formatCOP(l.price * l.quantity)}
-                    </span>
-                  </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Ciudad {cargandoCiudades && <span className="text-gray-400">(cargando…)</span>}
+              </label>
+              <select
+                value={form.city}
+                onChange={(e) => setForm({ ...form, city: e.target.value })}
+                disabled={!form.state || cargandoCiudades}
+                className="w-full px-3 py-2 rounded-md border border-gray-300 text-sm bg-white disabled:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[#fc5245]"
+              >
+                <option value="">Selecciona…</option>
+                {ciudades.map((c) => (
+                  <option key={c} value={c}>{c}</option>
                 ))}
-                <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-sm">
-                  <span className="font-semibold text-gray-700">Total</span>
-                  <span className="font-bold text-gray-900">{formatCOP(subtotal)}</span>
-                </div>
-                <p className="text-[11px] text-gray-400">Envío gratis, igual que en el checkout real.</p>
-              </div>
-            )}
-          </section>
-
-          <div className="space-y-2">
-            <button
-              onClick={() => enviar(true)}
-              disabled={!listo || enviando}
-              className="w-full py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-md hover:bg-gray-50 disabled:opacity-40"
-            >
-              Simular — ver qué se enviaría
-            </button>
-            <button
-              onClick={() => enviar(false)}
-              disabled={!listo || enviando}
-              className="w-full py-3 bg-[#fc5245] text-white text-sm font-semibold rounded-md hover:bg-[#e83d30] disabled:opacity-40"
-            >
-              {enviando ? "Enviando…" : "Enviar pedido de prueba"}
-            </button>
+              </select>
+            </div>
           </div>
 
-          {resultado && (
-            <ResultadoPanel
-              resultado={resultado}
-              verPayload={verPayload}
-              onTogglePayload={() => setVerPayload((v) => !v)}
-            />
-          )}
-
-          <section className="bg-white rounded-lg border border-gray-200 p-4">
-            <p className="text-[11px] font-semibold text-gray-700 mb-2">Cobertura Sendura</p>
-            <ul className="text-[11px] text-gray-500 space-y-0.5">
-              {RESUMEN_COBERTURA.map((c) => (
-                <li key={c}>· {c}</li>
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">Método de pago</label>
+            <div className="flex gap-2">
+              {([
+                ["contraentrega", "Contra entrega"],
+                ["anticipado", "Pago anticipado (simulado)"],
+              ] as const).map(([valor, etiqueta]) => (
+                <button
+                  key={valor}
+                  onClick={() => setForm({ ...form, paymentMethod: valor })}
+                  className={`flex-1 py-2 rounded-md text-xs font-semibold border transition-colors ${
+                    form.paymentMethod === valor
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                  }`}
+                >
+                  {etiqueta}
+                </button>
               ))}
-            </ul>
-            <p className="text-[11px] text-gray-400 mt-2">
-              Los corregimientos de estos municipios —los que aparecen como
-              &ldquo;Vereda (Municipio)&rdquo;— también cuentan como cobertura.
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1.5">
+              El pago anticipado no cobra nada: entra como pagado sin pasar por Mercado Pago.
             </p>
-          </section>
+          </div>
+        </section>
+      </div>
+
+      {/* Destino + carrito + envío */}
+      <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+        <DestinoBanner
+          state={form.state}
+          city={form.city}
+          cubierta={cobertura?.cubierta ?? null}
+          municipio={cobertura?.municipio?.city}
+          corregimiento={cobertura?.corregimiento}
+        />
+
+        <section className="bg-white rounded-lg border border-gray-200 p-5">
+          <h2 className="font-semibold text-gray-900 text-sm mb-3">Pedido</h2>
+          {carrito.length === 0 ? (
+            <p className="text-xs text-gray-400">Aún no has añadido productos.</p>
+          ) : (
+            <div className="space-y-2">
+              {carrito.map((l) => (
+                <div key={l.shopifyVariantId} className="flex items-center gap-2 text-xs">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 font-medium truncate">{l.name}</p>
+                    <p className="text-gray-400 truncate">
+                      {l.variant} · <span className="font-mono">{l.sku || "sin SKU"}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => cambiarCantidad(l.shopifyVariantId, -1)} className="w-6 h-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">−</button>
+                    <span className="w-6 text-center tabular-nums">{l.quantity}</span>
+                    <button onClick={() => cambiarCantidad(l.shopifyVariantId, 1)} className="w-6 h-6 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">+</button>
+                  </div>
+                  <span className="w-20 text-right font-semibold text-gray-900 flex-shrink-0">
+                    {formatCOP(l.price * l.quantity)}
+                  </span>
+                </div>
+              ))}
+              <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between text-sm">
+                <span className="font-semibold text-gray-700">Total</span>
+                <span className="font-bold text-gray-900">{formatCOP(subtotal)}</span>
+              </div>
+              <p className="text-[11px] text-gray-400">Envío gratis, igual que en el checkout real.</p>
+            </div>
+          )}
+        </section>
+
+        <div className="space-y-2">
+          <button
+            onClick={() => enviar(true)}
+            disabled={!listo || enviando}
+            className="w-full py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-semibold rounded-md hover:bg-gray-50 disabled:opacity-40"
+          >
+            Simular — ver qué se enviaría
+          </button>
+          <button
+            onClick={() => enviar(false)}
+            disabled={!listo || enviando}
+            className="w-full py-3 bg-[#fc5245] text-white text-sm font-semibold rounded-md hover:bg-[#e83d30] disabled:opacity-40"
+          >
+            {enviando ? "Enviando…" : "Enviar pedido de prueba"}
+          </button>
         </div>
-      </main>
+
+        {resultado && (
+          <ResultadoPanel
+            resultado={resultado}
+            verPayload={verPayload}
+            onTogglePayload={() => setVerPayload((v) => !v)}
+          />
+        )}
+
+        <section className="bg-white rounded-lg border border-gray-200 p-4">
+          <p className="text-[11px] font-semibold text-gray-700 mb-2">Cobertura Sendura</p>
+          <ul className="text-[11px] text-gray-500 space-y-0.5">
+            {RESUMEN_COBERTURA.map((c) => (
+              <li key={c}>· {c}</li>
+            ))}
+          </ul>
+          <p className="text-[11px] text-gray-400 mt-2">
+            Los corregimientos de estos municipios —los que aparecen como
+            &ldquo;Vereda (Municipio)&rdquo;— también cuentan como cobertura.
+          </p>
+        </section>
+      </div>
     </div>
   );
 }
@@ -559,8 +482,7 @@ function DestinoBanner({
       </p>
       <p className="text-2xl font-bold text-blue-900">SHOPIFY</p>
       <p className="text-xs text-blue-800 mt-2">
-        {city} ({state}) no está en la cobertura de Sendura, así que sigue el flujo de
-        siempre.
+        {city} ({state}) no está en la cobertura de Sendura, así que sigue el flujo de siempre.
       </p>
     </div>
   );
