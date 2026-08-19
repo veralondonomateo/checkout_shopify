@@ -168,12 +168,20 @@ export default function AdminClient() {
               Admin — {products.length} productos
             </span>
           </div>
-          <button
-            onClick={() => { setAuthenticated(false); setProducts([]); setPassword(""); }}
-            className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            Cerrar sesión
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin/pruebas"
+              className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-2.5 py-1 hover:bg-amber-100 transition-colors"
+            >
+              Pruebas Sendura
+            </Link>
+            <button
+              onClick={() => { setAuthenticated(false); setProducts([]); setPassword(""); }}
+              className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </header>
 

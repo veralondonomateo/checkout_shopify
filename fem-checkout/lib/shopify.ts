@@ -284,6 +284,12 @@ export interface ShopifyOrderInput {
   femOrderId: string;
   couponCode?: string | null;
   discount?: number | null;
+  /**
+   * Etiquetas adicionales, encima de las de siempre. Hoy solo la usa el
+   * entorno de pruebas de Sendura, para poder filtrar y anular esos pedidos
+   * en Shopify sin confundirlos con ventas reales.
+   */
+  extraTags?: string[];
 }
 
 export async function createShopifyOrder(
@@ -357,7 +363,7 @@ export async function createShopifyOrder(
         ? [{ name: "coupon_code", value: input.couponCode }]
         : []),
     ],
-    tags: `fem-checkout,${input.paymentMethod}`,
+    tags: [`fem-checkout`, input.paymentMethod, ...(input.extraTags ?? [])].join(","),
   };
 
   if (input.couponCode && input.discount && input.discount > 0) {
