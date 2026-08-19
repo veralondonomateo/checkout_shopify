@@ -61,13 +61,10 @@ function idCorto(): string {
 }
 
 export async function POST(req: NextRequest) {
-  // Mismo candado que el resto del admin: estos pedidos crean guías y órdenes
-  // reales, así que la página no puede quedar abierta a internet.
-  const pw = req.headers.get("x-admin-password");
-  if (!pw || pw !== process.env.ADMIN_PASSWORD) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
+  // Sin contraseña mientras duren las pruebas, para poder compartir el módulo.
+  // Ojo: cada llamada crea una guía real en Sendura o una orden real en
+  // Shopify. Para volver a cerrarlo, comprobar aquí `x-admin-password` contra
+  // `process.env.ADMIN_PASSWORD` (y en el módulo, volver a mandar la cabecera).
   let body: PruebaBody;
   try {
     body = await req.json();

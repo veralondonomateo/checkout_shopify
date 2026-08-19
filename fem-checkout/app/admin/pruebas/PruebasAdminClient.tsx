@@ -1,19 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { coberturaSendura, RESUMEN_COBERTURA } from "@/lib/cobertura-sendura";
+import CheckoutPrueba from "./CheckoutPrueba";
 
 /**
- * Módulo de pruebas de Sendura dentro del admin.
+ * Módulo de pruebas de Sendura, dentro del admin.
  *
- * Tres cosas, en este orden de importancia:
- *  1. El registro de cada pedido de prueba, con la guía o la orden de Shopify
- *     que salió — es lo que se revisa junto a Sendura.
- *  2. El payload exacto que se envió y lo que respondieron, para depurar
- *     nombres de ciudad y SKU sin adivinar.
- *  3. Un probador de cobertura, para responder "¿y tal municipio?" al instante.
+ * Dos pestañas: el checkout de prueba y el registro de lo que ya se envió, con
+ * el payload exacto y la respuesta de Sendura — que es lo que se revisa con
+ * ellos para ajustar SKU y nombres de ciudad sin adivinar.
+ *
+ * Va sin contraseña a propósito, para poder compartirlo durante las pruebas.
+ * Volver a cerrarlo es descomentar la comprobación de `ADMIN_PASSWORD` en
+ * `app/api/pruebas/checkout/route.ts` y en `app/api/pruebas/registro/route.ts`.
  */
+
+interface Producto {
+  id: number;
+  title: string;
+  handle: string;
+  variants: Array<{ id: number; title: string; price: string; sku?: string }>;
+  images: { src: string }[];
+}
 
 interface Prueba {
   id: string;
@@ -54,80 +64,29 @@ const formatFecha = (iso: string) =>
     minute: "2-digit",
   });
 
-export default function PruebasAdminClient() {
-  const [password, setPassword] = useState("");
-  const [autenticado, setAutenticado] = useState(false);
+export default function PruebasAdminClient({ productos }: { productos: Producto[] }) {
+  const [pestana, setPestana] = useState<"checkout" | "registro">("checkout");
   const [pruebas, setPruebas] = useState<Prueba[]>([]);
-  const [cargando, setCargando] = useState(false);
-  const [errorLogin, setErrorLogin] = useState("");
+  const [cargando, setCargando] = useState(true);
   const [expandida, setExpandida] = useState<string | null>(null);
 
-  const cargar = async (pw: string) => {
-    const res = await fetch("/api/admin/pruebas", { headers: { "x-admin-password": pw } });
-    if (res.status === 401) throw new Error("Contraseña incorrecta");
-    if (!res.ok) throw new Error("Error al cargar el registro");
-    const data = await res.json();
-    setPruebas(data.pruebas ?? []);
-  };
-
-  const entrar = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCargando(true);
-    setErrorLogin("");
-    try {
-      await cargar(password);
-      setAutenticado(true);
-    } catch (err) {
-      setErrorLogin(err instanceof Error ? err.message : "Error de conexión");
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  // Refresco manual: estas pruebas son pocas y manuales, no hace falta polling.
-  const refrescar = async () => {
+  const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      await cargar(password);
+      const res = await fetch("/api/pruebas/registro");
+      if (!res.ok) return;
+      const data = await res.json();
+      setPruebas(data.pruebas ?? []);
     } catch {
       /* se conserva lo que ya está en pantalla */
     } finally {
       setCargando(false);
     }
-  };
+  }, []);
 
-  if (!autenticado) {
-    return (
-      <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center px-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 w-full max-w-sm shadow-sm">
-          <div className="text-center mb-6">
-            <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              Pruebas Sendura
-            </span>
-            <p className="text-sm text-gray-500 mt-3">Registro de pedidos de prueba</p>
-          </div>
-          <form onSubmit={entrar} className="space-y-4">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Contraseña del admin"
-              className="w-full px-3.5 py-2.5 rounded-md border border-gray-300 text-sm focus:outline-none focus:ring-1 focus:ring-[#fc5245] focus:border-[#fc5245]"
-              autoFocus
-            />
-            {errorLogin && <p className="text-xs text-red-500">{errorLogin}</p>}
-            <button
-              type="submit"
-              disabled={cargando || !password}
-              className="w-full py-2.5 bg-[#fc5245] text-white text-sm font-semibold rounded-md hover:bg-[#e83d30] transition-colors disabled:opacity-50"
-            >
-              {cargando ? "Cargando..." : "Entrar"}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    cargar();
+  }, [cargar]);
 
   const aSendura = pruebas.filter((p) => p.carrier === "sendura");
   const aShopify = pruebas.filter((p) => p.carrier === "shopify");
@@ -141,131 +100,165 @@ export default function PruebasAdminClient() {
             <Link href="/admin" className="text-xs text-gray-500 hover:text-gray-900 flex-shrink-0">
               ← Admin
             </Link>
-            <span className="text-sm font-semibold text-gray-900 truncate">
-              Pruebas Sendura
-            </span>
+            <span className="text-sm font-semibold text-gray-900 truncate">Pruebas Sendura</span>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={refrescar}
-              disabled={cargando}
-              className="text-xs px-3 py-1.5 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-            >
-              {cargando ? "…" : "Refrescar"}
-            </button>
-            <Link
-              href="/pruebas"
-              className="text-xs px-3 py-1.5 bg-[#fc5245] text-white rounded-md font-semibold hover:bg-[#e83d30]"
-            >
-              Abrir checkout de prueba
-            </Link>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5 flex-shrink-0">
+            {([
+              ["checkout", "Nuevo pedido"],
+              ["registro", `Registro${pruebas.length ? ` (${pruebas.length})` : ""}`],
+            ] as const).map(([valor, etiqueta]) => (
+              <button
+                key={valor}
+                onClick={() => {
+                  setPestana(valor);
+                  if (valor === "registro") cargar();
+                }}
+                className={`px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
+                  pestana === valor
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-800"
+                }`}
+              >
+                {etiqueta}
+              </button>
+            ))}
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {/* Resumen */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Tarjeta etiqueta="Pruebas" valor={pruebas.length} />
-          <Tarjeta etiqueta="A Sendura" valor={aSendura.length} color="text-emerald-700" />
-          <Tarjeta etiqueta="A Shopify" valor={aShopify.length} color="text-blue-700" />
-          <Tarjeta etiqueta="Fallidas" valor={fallidas.length} color={fallidas.length ? "text-red-600" : undefined} />
+      <div className="bg-amber-50 border-b border-amber-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5 text-xs text-amber-900">
+          Los pedidos que envíes aquí son <strong>reales</strong> en Sendura y en Shopify — hay
+          que anularlos a mano. No tocan la tabla de ventas, ni Mercado Pago, ni Meta, ni el CRM.
         </div>
+      </div>
 
-        <ProbadorCobertura />
-
-        {/* Registro */}
-        <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-sm">Pedidos de prueba</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Toca una fila para ver el payload enviado y la respuesta. Estos pedidos hay que
-              anularlos a mano en Sendura y en Shopify.
-            </p>
-          </div>
-
-          {pruebas.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-sm text-gray-500">Todavía no hay pedidos de prueba.</p>
-              <Link href="/pruebas" className="text-xs text-[#fc5245] font-medium mt-2 inline-block">
-                Crear el primero →
-              </Link>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        {pestana === "checkout" ? (
+          <CheckoutPrueba productos={productos} onEnviado={cargar} />
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Tarjeta etiqueta="Pruebas" valor={pruebas.length} />
+              <Tarjeta etiqueta="A Sendura" valor={aSendura.length} color="text-emerald-700" />
+              <Tarjeta etiqueta="A Shopify" valor={aShopify.length} color="text-blue-700" />
+              <Tarjeta
+                etiqueta="Fallidas"
+                valor={fallidas.length}
+                color={fallidas.length ? "text-red-600" : undefined}
+              />
             </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {pruebas.map((p) => (
-                <div key={p.id}>
-                  <button
-                    onClick={() => setExpandida(expandida === p.id ? null : p.id)}
-                    className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded flex-shrink-0 w-20 text-center ${
-                        p.carrier === "sendura"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
+
+            <ProbadorCobertura />
+
+            <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-gray-900 text-sm">Pedidos de prueba</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Toca una fila para ver el payload enviado y la respuesta.
+                  </p>
+                </div>
+                <button
+                  onClick={cargar}
+                  disabled={cargando}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50 disabled:opacity-50 flex-shrink-0"
+                >
+                  {cargando ? "…" : "Refrescar"}
+                </button>
+              </div>
+
+              {pruebas.length === 0 ? (
+                <div className="p-12 text-center">
+                  <p className="text-sm text-gray-500">
+                    {cargando ? "Cargando…" : "Todavía no hay pedidos de prueba."}
+                  </p>
+                  {!cargando && (
+                    <button
+                      onClick={() => setPestana("checkout")}
+                      className="text-xs text-[#fc5245] font-medium mt-2"
                     >
-                      {p.carrier}
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 truncate">
-                        {p.city} <span className="text-gray-400">· {p.state}</span>
-                      </p>
-                      <p className="text-xs text-gray-400 truncate">
-                        {p.first_name} {p.last_name} · {formatFecha(p.created_at)} ·{" "}
-                        {p.payment_method}
-                      </p>
-                    </div>
-
-                    <div className="text-right flex-shrink-0">
-                      {p.status === "error" ? (
-                        <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                          error
-                        </span>
-                      ) : (
-                        <p className="text-xs font-mono text-gray-700">
-                          {p.sendura_guia
-                            ? `guía ${p.sendura_guia}`
-                            : p.shopify_order_id
-                              ? `Shopify ${p.shopify_order_id}`
-                              : "—"}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 tabular-nums">{formatCOP(p.total)}</p>
-                    </div>
-                  </button>
-
-                  {expandida === p.id && (
-                    <div className="px-5 pb-5 bg-gray-50 border-t border-gray-100 space-y-3">
-                      <div className="pt-3 text-xs text-gray-600 space-y-1">
-                        <p><span className="text-gray-400">Motivo:</span> {p.motivo ?? "—"}</p>
-                        <p><span className="text-gray-400">Dirección:</span> {p.address}</p>
-                        <p><span className="text-gray-400">Celular:</span> {p.phone}</p>
-                        <p>
-                          <span className="text-gray-400">Productos:</span>{" "}
-                          {p.items?.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
-                        </p>
-                      </div>
-
-                      {p.error && (
-                        <div className="bg-red-50 border border-red-200 rounded p-3">
-                          <p className="text-xs text-red-800 leading-relaxed">{p.error}</p>
-                        </div>
-                      )}
-
-                      <Bloque titulo="Enviado" contenido={p.request_payload} />
-                      {p.response_payload != null && (
-                        <Bloque titulo="Respuesta" contenido={p.response_payload} />
-                      )}
-                    </div>
+                      Crear el primero →
+                    </button>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {pruebas.map((p) => (
+                    <div key={p.id}>
+                      <button
+                        onClick={() => setExpandida(expandida === p.id ? null : p.id)}
+                        className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-gray-50 transition-colors"
+                      >
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded flex-shrink-0 w-20 text-center ${
+                            p.carrier === "sendura"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-blue-100 text-blue-800"
+                          }`}
+                        >
+                          {p.carrier}
+                        </span>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-900 truncate">
+                            {p.city} <span className="text-gray-400">· {p.state}</span>
+                          </p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {p.first_name} {p.last_name} · {formatFecha(p.created_at)} ·{" "}
+                            {p.payment_method}
+                          </p>
+                        </div>
+
+                        <div className="text-right flex-shrink-0">
+                          {p.status === "error" ? (
+                            <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                              error
+                            </span>
+                          ) : (
+                            <p className="text-xs font-mono text-gray-700">
+                              {p.sendura_guia
+                                ? `guía ${p.sendura_guia}`
+                                : p.shopify_order_id
+                                  ? `Shopify ${p.shopify_order_id}`
+                                  : "—"}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400 tabular-nums">{formatCOP(p.total)}</p>
+                        </div>
+                      </button>
+
+                      {expandida === p.id && (
+                        <div className="px-5 pb-5 bg-gray-50 border-t border-gray-100 space-y-3">
+                          <div className="pt-3 text-xs text-gray-600 space-y-1">
+                            <p><span className="text-gray-400">Motivo:</span> {p.motivo ?? "—"}</p>
+                            <p><span className="text-gray-400">Dirección:</span> {p.address}</p>
+                            <p><span className="text-gray-400">Celular:</span> {p.phone}</p>
+                            <p>
+                              <span className="text-gray-400">Productos:</span>{" "}
+                              {p.items?.map((i) => `${i.quantity}× ${i.name}`).join(", ")}
+                            </p>
+                          </div>
+
+                          {p.error && (
+                            <div className="bg-red-50 border border-red-200 rounded p-3">
+                              <p className="text-xs text-red-800 leading-relaxed">{p.error}</p>
+                            </div>
+                          )}
+
+                          <Bloque titulo="Enviado" contenido={p.request_payload} />
+                          {p.response_payload != null && (
+                            <Bloque titulo="Respuesta" contenido={p.response_payload} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -309,15 +302,13 @@ function ProbadorCobertura() {
   const [consulta, setConsulta] = useState("");
   const [todas, setTodas] = useState<Array<{ state: string; city: string }>>([]);
 
-  // El catálogo completo pesa ~195 KB: se descarga solo cuando alguien abre
-  // este probador, no en el bundle del admin. Mismo criterio que el checkout.
+  // El catálogo completo pesa ~195 KB: se descarga solo al abrir este módulo,
+  // no en el bundle del admin. Mismo criterio que el checkout.
   useEffect(() => {
     let vigente = true;
     import("@/data/states.json").then(({ default: data }) => {
       if (!vigente) return;
-      setTodas(
-        data.states.flatMap((s) => s.cities.map((c) => ({ state: s.name, city: c })))
-      );
+      setTodas(data.states.flatMap((s) => s.cities.map((c) => ({ state: s.name, city: c }))));
     });
     return () => {
       vigente = false;
