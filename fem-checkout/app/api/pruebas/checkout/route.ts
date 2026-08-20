@@ -146,7 +146,13 @@ export async function POST(req: NextRequest) {
 
     const payload: SenduraOrderInput = {
       order_number: referencia,
-      shopify_id: referencia,
+      // `shopify_id` va fuera a propósito. Su documentación lo describe como
+      // un identificador de correlación libre, pero su API devuelve 500
+      // ("Error de procesamiento interno del servidor") en cuanto el valor no
+      // es numérico — aislado campo por campo el 2026-08-20: el mismo payload
+      // sin este campo entra con 201 y guía. Nuestra referencia es
+      // "PRUEBA-XXXXXX", así que lo omitimos y dejamos la correlación en
+      // `order_number`, que sí acepta texto.
       customer_name: nombreCompleto,
       customer_email: body.email || undefined,
       customer_phone: body.phone.replace(/\D/g, ""),
