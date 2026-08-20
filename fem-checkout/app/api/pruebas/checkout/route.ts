@@ -144,15 +144,19 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join(" — ");
 
+    // Los dos identificadores viajan vacíos y los genera Sendura.
+    //
+    // `shopify_id` con texto tumbaba su servidor con un 500; ellos ajustaron
+    // para aceptarlo vacío, y de paso pidieron mandar `order_number` igual.
+    // Verificado contra su API: con ambos en "" responde 201 y devuelve los
+    // suyos (`order_number: "202608191429"`, `shopify_id: "20260819201429"`).
+    //
+    // El precio de eso es que nuestra referencia ya no viaja en ningún campo
+    // indexado, así que va en las notas: sin ella, un pedido de prueba en su
+    // panel no se puede reconciliar con el nuestro salvo por la guía.
     const payload: SenduraOrderInput = {
-      order_number: referencia,
-      // `shopify_id` va fuera a propósito. Su documentación lo describe como
-      // un identificador de correlación libre, pero su API devuelve 500
-      // ("Error de procesamiento interno del servidor") en cuanto el valor no
-      // es numérico — aislado campo por campo el 2026-08-20: el mismo payload
-      // sin este campo entra con 201 y guía. Nuestra referencia es
-      // "PRUEBA-XXXXXX", así que lo omitimos y dejamos la correlación en
-      // `order_number`, que sí acepta texto.
+      order_number: "",
+      shopify_id: "",
       customer_name: nombreCompleto,
       customer_email: body.email || undefined,
       customer_phone: body.phone.replace(/\D/g, ""),
@@ -161,7 +165,7 @@ export async function POST(req: NextRequest) {
       shipping_city: cobertura.municipio.city,
       shipping_province: provinciaSendura(cobertura.municipio),
       shipping_country: "Colombia",
-      notes: NOTA_PRUEBA,
+      notes: `${NOTA_PRUEBA} Ref FEM: ${referencia}.`,
       total_price: total,
       financial_status: body.paymentMethod === "contraentrega" ? "pending" : "paid",
       items: resueltos.map((i) => ({
