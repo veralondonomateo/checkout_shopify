@@ -42,8 +42,24 @@ export function isProcessingActive(
 }
 
 /**
+ * ¿El pedido ya salió por algún operador?
+ *
+ * Desde que Sendura despacha parte de los pedidos, "ya sincronizado" dejó de
+ * ser `shopify_order_id` no nulo. Si esta condición se olvidara en algún sitio,
+ * el cron de rescate volvería a crear en Shopify un pedido que Sendura ya
+ * despachó — dos entregas del mismo pedido.
+ */
+export function estaDespachado(orden: {
+  shopify_order_id?: number | string | null;
+  sendura_order_id?: string | null;
+}): boolean {
+  return !!orden.shopify_order_id || !!orden.sendura_order_id;
+}
+
+/**
  * Reserva la orden de forma atómica (compare-and-swap sobre `shopify_error`).
- * Devuelve false si otro proceso ganó la carrera o si la orden ya se sincronizó.
+ * Devuelve false si otro proceso ganó la carrera o si la orden ya se despachó
+ * por cualquiera de los dos operadores.
  */
 export async function claimOrderForShopify(
   supabase: SupabaseClient,
@@ -54,7 +70,8 @@ export async function claimOrderForShopify(
     .from("orders")
     .update({ shopify_error: processingMarker() })
     .eq("id", orderId)
-    .is("shopify_order_id", null);
+    .is("shopify_order_id", null)
+    .is("sendura_order_id", null);
 
   const guarded =
     currentError === null

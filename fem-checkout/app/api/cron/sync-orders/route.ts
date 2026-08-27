@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { createShopifyOrder } from "@/lib/shopify";
 import { sendAlert } from "@/lib/alert";
 import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
+import {
+  camposDeResultado,
+  despacharPedido,
+  DespachoEnRevision,
+  REVISAR_PREFIX,
+} from "@/lib/despacho";
 
 /**
  * Safety-net cron: finds every approved order (contraentrega + paid MP)
@@ -28,10 +33,16 @@ export async function GET(req: NextRequest) {
   // so orders with shopify_error=null would be silently excluded. Use OR to include them.
   const { data: orphans, error } = await supabase
     .from("orders")
-    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, discount, coupon_code, payment_method, shopify_error")
+    .select("id, email, first_name, last_name, phone, address, complement, city, state, shipping, total, discount, coupon_code, payment_method, shopify_error, sendura_error")
     .eq("payment_status", "approved")
     .is("shopify_order_id", null)
+    // Un pedido que ya salió por Sendura no es huérfano: sin esto el cron lo
+    // volvería a crear en Shopify y el cliente recibiría dos entregas.
+    .is("sendura_order_id", null)
     .or("shopify_error.is.null,shopify_error.not.ilike.PERMANENT:%")
+    // Los detenidos por respuesta ambigua de Sendura NO se reintentan solos:
+    // reintentar podría crear una segunda guía. Salen en el dashboard.
+    .or(`sendura_error.is.null,sendura_error.not.ilike.${REVISAR_PREFIX}:%`)
     .lt("created_at", cutoff);
 
   if (error) {
@@ -51,11 +62,11 @@ export async function GET(req: NextRequest) {
     // Re-check inside loop in case a concurrent finalize just ran
     const { data: fresh } = await supabase
       .from("orders")
-      .select("shopify_order_id, coupon_code, discount, shopify_error")
+      .select("shopify_order_id, sendura_order_id, coupon_code, discount, shopify_error")
       .eq("id", order.id)
       .single();
 
-    if (fresh?.shopify_order_id) {
+    if (fresh?.shopify_order_id || fresh?.sendura_order_id) {
       results.push({ id: order.id, status: "ok", detail: "already_synced" });
       continue;
     }
@@ -79,50 +90,50 @@ export async function GET(req: NextRequest) {
       .eq("order_id", order.id);
 
     try {
-      const shopifyId = await createShopifyOrder({
-        email: order.email,
-        firstName: order.first_name,
-        lastName: order.last_name,
-        phone: order.phone,
-        address: order.address,
-        complement: order.complement,
-        city: order.city,
-        state: order.state,
-        items: (items ?? []).map((i) => ({
+      const resultado = await despacharPedido(
+        order,
+        (items ?? []).map((i) => ({
           name: i.name,
           variant: i.variant,
           price: i.price,
           quantity: i.quantity,
           shopifyVariantId: i.shopify_variant_id ?? undefined,
-        })),
-        shipping: order.shipping ?? 0,
-        total: order.total,
-        paymentMethod: order.payment_method,
-        femOrderId: order.id,
-        couponCode: order.coupon_code ?? null,
-        discount: order.discount ? parseFloat(order.discount) : null,
-      });
+        }))
+      );
 
-      // Atomic claim: only update if no other process beat us (race-condition guard)
+      // Cierre atómico contra las dos columnas.
       const { data: claimed } = await supabase
         .from("orders")
-        .update({ shopify_order_id: shopifyId, shopify_error: null })
+        .update(camposDeResultado(resultado))
         .eq("id", order.id)
         .is("shopify_order_id", null)
+        .is("sendura_order_id", null)
         .select("id")
         .maybeSingle();
 
       if (!claimed) {
-        const alertMsg = `[Cron] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${order.id} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+        const ref = resultado.senduraOrderId ?? resultado.shopifyOrderId;
+        const alertMsg = `[Cron] DUPLICADO: se creó ${resultado.destino} ${ref} para la orden ${order.id}, que ya estaba despachada. Revisar y anular el duplicado.`;
         console.error(alertMsg);
         sendAlert(alertMsg).catch(() => {});
         results.push({ id: order.id, status: "ok", detail: "already_synced_race" });
         continue;
       }
 
-      console.log(`[Cron] Recovered order ${order.id} → Shopify #${shopifyId}`);
-      results.push({ id: order.id, status: "ok", detail: String(shopifyId) });
+      const ref = resultado.senduraOrderId ?? String(resultado.shopifyOrderId);
+      console.log(`[Cron] Rescatada ${order.id} → ${resultado.destino} ${ref}`);
+      results.push({ id: order.id, status: "ok", detail: `${resultado.destino}:${ref}` });
     } catch (err) {
+      // Respuesta ambigua de Sendura: se marca y no se vuelve a intentar solo.
+      if (err instanceof DespachoEnRevision) {
+        await supabase
+          .from("orders")
+          .update({ sendura_error: err.detalle, shopify_error: null })
+          .eq("id", order.id);
+        results.push({ id: order.id, status: "error", detail: "en_revision" });
+        continue;
+      }
+
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[Cron] Failed to recover order ${order.id}:`, msg);
       // 422 = Shopify validation error (bad data) → permanent failure, don't retry

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { createShopifyOrder } from "@/lib/shopify";
 import { sendAlert } from "@/lib/alert";
-import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
+import { claimOrderForShopify, estaDespachado, isProcessingActive } from "@/lib/order-sync";
+import { camposDeResultado, despacharPedido, DespachoEnRevision } from "@/lib/despacho";
 
 // Crea la orden en Shopify para pedidos contraentrega, llamado desde el
 // thank-you page tras la ventana de upsell (90 s o al cerrar la pestaña).
@@ -31,9 +31,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
   }
 
-  // Idempotencia: ya tiene orden en Shopify
-  if (order.shopify_order_id) {
-    return NextResponse.json({ ok: true, shopify_order_id: order.shopify_order_id });
+  // Idempotencia: ya salió por Shopify o por Sendura
+  if (estaDespachado(order)) {
+    return NextResponse.json({
+      ok: true,
+      shopify_order_id: order.shopify_order_id,
+      sendura_order_id: order.sendura_order_id,
+    });
   }
 
   // Solo para órdenes aprobadas contraentrega
@@ -61,51 +65,57 @@ export async function POST(req: NextRequest) {
     .eq("order_id", order_id);
 
   try {
-    const shopifyId = await createShopifyOrder({
-      email: order.email,
-      firstName: order.first_name,
-      lastName: order.last_name,
-      phone: order.phone,
-      address: order.address,
-      complement: order.complement,
-      city: order.city,
-      state: order.state,
-      items: (items ?? []).map((i) => ({
+    const resultado = await despacharPedido(
+      order,
+      (items ?? []).map((i) => ({
         name: i.name,
         variant: i.variant,
         price: i.price,
         quantity: i.quantity,
         shopifyVariantId: i.shopify_variant_id ?? undefined,
-      })),
-      shipping: order.shipping ?? 0,
-      total: order.total,
-      paymentMethod: "contraentrega",
-      femOrderId: order_id,
-      couponCode: order.coupon_code ?? null,
-      discount: order.discount ?? null,
-    });
+      }))
+    );
 
-    // Atomic claim: only update if no other process beat us (race-condition guard)
+    // Cierre atómico: solo escribe si nadie más despachó el pedido mientras
+    // tanto. Mira las dos columnas, no solo la de Shopify.
     const { data: claimed } = await supabase
       .from("orders")
-      .update({ shopify_order_id: shopifyId, shopify_error: null })
+      .update(camposDeResultado(resultado))
       .eq("id", order_id)
       .is("shopify_order_id", null)
+      .is("sendura_order_id", null)
       .select("id")
       .maybeSingle();
 
     if (!claimed) {
-      const alertMsg = `[Finalize] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${order_id} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+      const ref = resultado.senduraOrderId ?? resultado.shopifyOrderId;
+      const alertMsg = `[Finalize] DUPLICADO: se creó ${resultado.destino} ${ref} para la orden ${order_id}, que ya estaba despachada. Revisar y anular el duplicado.`;
       console.error(alertMsg);
       sendAlert(alertMsg).catch(() => {});
     }
 
-    console.log(`[Finalize] Orden Shopify #${shopifyId} creada para ${order_id}`);
-    return NextResponse.json({ ok: true, shopify_order_id: shopifyId });
+    console.log(`[Finalize] Orden ${order_id} despachada por ${resultado.destino}`);
+    return NextResponse.json({
+      ok: true,
+      destino: resultado.destino,
+      shopify_order_id: resultado.shopifyOrderId,
+      sendura_order_id: resultado.senduraOrderId,
+    });
   } catch (err) {
+    // Sendura no respondió: el pedido queda detenido a propósito, sin
+    // despachar por ningún lado, hasta que alguien mire su panel.
+    if (err instanceof DespachoEnRevision) {
+      await supabase
+        .from("orders")
+        .update({ sendura_error: err.detalle, shopify_error: null })
+        .eq("id", order_id);
+      sendAlert(`[Finalize] Orden ${order_id} detenida: ${err.detalle}`).catch(() => {});
+      return NextResponse.json({ ok: false, en_revision: true }, { status: 202 });
+    }
+
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[Finalize] Error creando orden Shopify:", msg);
+    console.error("[Finalize] Error despachando la orden:", msg);
     await supabase.from("orders").update({ shopify_error: msg }).eq("id", order_id);
-    return NextResponse.json({ error: "Error Shopify", detail: msg }, { status: 500 });
+    return NextResponse.json({ error: "Error de despacho", detail: msg }, { status: 500 });
   }
 }

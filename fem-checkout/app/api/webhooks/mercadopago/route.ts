@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "crypto";
 import { createServerClient } from "@/lib/supabase";
-import { createShopifyOrder } from "@/lib/shopify";
 import { sendPurchaseEvent } from "@/lib/meta";
 import { mapMPStatus } from "@/lib/mp";
 import { sendAlert } from "@/lib/alert";
-import { claimOrderForShopify, isProcessingActive } from "@/lib/order-sync";
+import { claimOrderForShopify, estaDespachado, isProcessingActive } from "@/lib/order-sync";
+import { camposDeResultado, despacharPedido, DespachoEnRevision } from "@/lib/despacho";
 
 const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000; // 5 minutos
 
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
         .eq("id", orderId)
         .single();
 
-      if (order && !order.shopify_order_id) {
+      if (order && !estaDespachado(order)) {
         // Pre-claim: previene que dos procesos concurrentes creen ambos una
         // orden en Shopify. Mismo protocolo que finalize y el cron.
         if (isProcessingActive(order.shopify_error)) {
@@ -198,49 +198,52 @@ export async function POST(req: NextRequest) {
           .eq("order_id", orderId);
 
         try {
-          const shopifyId = await createShopifyOrder({
-            email: order.email,
-            firstName: order.first_name,
-            lastName: order.last_name,
-            phone: order.phone,
-            address: order.address,
-            complement: order.complement,
-            city: order.city,
-            state: order.state,
-            items: (items ?? []).map((i) => ({
+          const resultado = await despacharPedido(
+            order,
+            (items ?? []).map((i) => ({
               name: i.name,
               variant: i.variant,
               price: i.price,
               quantity: i.quantity,
               shopifyVariantId: i.shopify_variant_id ?? undefined,
             })),
-            shipping: order.shipping ?? 0,
-            total: order.total,
-            paymentMethod: "mercadopago",
-            mpPaymentId: paymentId,
-            femOrderId: orderId,
-            couponCode: order.coupon_code ?? null,
-            discount: order.discount ? parseFloat(order.discount) : null,
-          });
+            { mpPaymentId: paymentId }
+          );
 
-          // Atomic update: only claim the row if no other process beat us to it
+          // Cierre atómico contra las dos columnas: si otro proceso despachó
+          // el pedido mientras tanto, esto no escribe y se avisa.
           const { data: claimed } = await supabase
             .from("orders")
-            .update({ shopify_order_id: shopifyId, shopify_error: null })
+            .update(camposDeResultado(resultado))
             .eq("id", orderId)
             .is("shopify_order_id", null)
+            .is("sendura_order_id", null)
             .select("id")
             .maybeSingle();
 
           if (!claimed) {
-            const alertMsg = `[MP Webhook] DUPLICADO: Shopify orden ${shopifyId} creada para orden ${orderId} que ya estaba sincronizada. Revisar y anular la orden duplicada en Shopify.`;
+            const ref = resultado.senduraOrderId ?? resultado.shopifyOrderId;
+            const alertMsg = `[MP Webhook] DUPLICADO: se creó ${resultado.destino} ${ref} para la orden ${orderId}, que ya estaba despachada. Revisar y anular el duplicado.`;
             console.error(alertMsg);
             sendAlert(alertMsg).catch(() => {});
+          } else {
+            console.log(`[MP Webhook] Orden ${orderId} despachada por ${resultado.destino}`);
           }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error("[MP Webhook] Error creando orden Shopify:", msg);
-          await supabase.from("orders").update({ shopify_error: msg }).eq("id", orderId);
+          // Sendura no respondió: el pedido queda detenido, sin despachar por
+          // ningún lado, hasta que alguien verifique en su panel. El pago ya
+          // está cobrado, así que esto tiene que verse en el dashboard.
+          if (err instanceof DespachoEnRevision) {
+            await supabase
+              .from("orders")
+              .update({ sendura_error: err.detalle, shopify_error: null })
+              .eq("id", orderId);
+            sendAlert(`[MP Webhook] Orden PAGADA ${orderId} detenida: ${err.detalle}`).catch(() => {});
+          } else {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("[MP Webhook] Error despachando la orden:", msg);
+            await supabase.from("orders").update({ shopify_error: msg }).eq("id", orderId);
+          }
         }
       }
     }
