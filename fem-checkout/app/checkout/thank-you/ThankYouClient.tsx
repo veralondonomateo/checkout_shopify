@@ -14,7 +14,23 @@ interface StoredOrder {
   items: OrderItem[];
   total: number;
   paymentMethod: "mercadopago" | "contraentrega";
+  /** Por dónde va a salir el pedido. Solo llega en contraentrega. */
+  destino?: "sendura" | "shopify" | null;
 }
+
+/**
+ * Cuánto se espera antes de despachar solo, si la clienta no decide nada.
+ *
+ * Con Shopify da igual pasarse: si el jabón entra después, la Order Editing
+ * API lo añade a la orden ya creada. Sendura no tiene forma de editar una guía
+ * emitida, así que ahí el pedido no puede salir hasta que la decisión esté
+ * tomada — de ahí la ventana más larga y el contador a la vista.
+ *
+ * Los dos plazos quedan holgadamente por debajo de los 10 minutos que espera
+ * el cron de rescate, así que ningún pedido se queda sin despachar por esto.
+ */
+const VENTANA_SHOPIFY_MS = 45_000;
+const VENTANA_SENDURA_MS = 240_000;
 
 /**
  * Precio del jabón en el upsell post-compra.
@@ -127,6 +143,44 @@ function triggerFinalize(
     });
 }
 
+/**
+ * Cuenta atrás de la oferta.
+ *
+ * Barra de progreso en el rojo de la marca sobre gris claro, como el resto del
+ * checkout. En el último medio minuto pasa a ámbar: el cambio de color avisa
+ * sin necesidad de leer el número, que en móvil es lo que de verdad se mira.
+ */
+function ContadorOferta({ restanteMs }: { restanteMs: number }) {
+  const totalSeg = Math.max(0, Math.ceil(restanteMs / 1000));
+  const mm = Math.floor(totalSeg / 60);
+  const ss = String(totalSeg % 60).padStart(2, "0");
+  const pct = Math.max(0, Math.min(100, (restanteMs / 240_000) * 100));
+  const apurando = totalSeg <= 30;
+  const color = apurando ? "#d97706" : "#fc5245";
+
+  return (
+    <div className="px-3 pt-3">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <span className="text-[11px] font-medium text-gray-500">
+          {apurando ? "La oferta está por cerrarse" : "Guardamos el espacio en tu bolsita"}
+        </span>
+        <span
+          className="text-sm font-bold tabular-nums transition-colors"
+          style={{ color }}
+        >
+          {mm}:{ss}
+        </span>
+      </div>
+      <div className="h-1 w-full rounded-full bg-gray-100 overflow-hidden">
+        <div
+          className="h-full rounded-full transition-[width] duration-1000 ease-linear"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function ThankYouClient() {
   const searchParams = useSearchParams();
   const status = searchParams.get("status");
@@ -136,6 +190,7 @@ export default function ThankYouClient() {
   const [upsellAdded, setUpsellAdded] = useState(false);
   const [upsellLoading, setUpsellLoading] = useState(false);
   const [upsellDismissed, setUpsellDismissed] = useState(false);
+  const [restanteMs, setRestanteMs] = useState<number | null>(null);
   const finalizedRef = useRef(false);
 
   const orderId = searchParams.get("order_id");
@@ -161,6 +216,12 @@ export default function ThankYouClient() {
   const isPending = status === "pending";
   // Contraentrega: no payment_id in URL; MP: has payment_id
   const isContraentrega = !paymentId && !isFailure && !isPending;
+  const esSendura = order?.destino === "sendura";
+  const ventanaMs = esSendura ? VENTANA_SENDURA_MS : VENTANA_SHOPIFY_MS;
+  // El contador solo se enseña cuando hay algo que decidir y vale la pena
+  // enseñarlo: en 45 s un reloj en pantalla es presión, no ayuda.
+  const mostrarContador =
+    esSendura && !upsellAdded && !upsellDismissed && !yaLlevaJabon && restanteMs !== null;
 
   useEffect(() => {
     // Cargar datos de display desde sessionStorage
@@ -256,8 +317,9 @@ export default function ThankYouClient() {
       }
     };
 
-    // Fallback: si el usuario no interactúa en 45s, crear la orden igual
-    const timer = setTimeout(() => triggerFinalize(orderId, finalizedRef), 45_000);
+    // Fallback: si la clienta no decide nada, el pedido se despacha igual al
+    // cerrarse la ventana. Nunca se queda esperando indefinidamente.
+    const timer = setTimeout(() => triggerFinalize(orderId, finalizedRef), ventanaMs);
     // `pagehide` y no `beforeunload`: en Safari de iPhone —de donde viene buena
     // parte del tráfico— `beforeunload` no dispara al cerrar la pestaña, y el
     // pedido se quedaba esperando al cron de rescate hasta 10 minutos.
@@ -266,7 +328,26 @@ export default function ThankYouClient() {
       clearTimeout(timer);
       window.removeEventListener("pagehide", beaconFinalize);
     };
-  }, [orderId, isContraentrega, order, yaLlevaJabon]);
+  }, [orderId, isContraentrega, order, yaLlevaJabon, ventanaMs]);
+
+  // Cuenta atrás visible de la oferta. Cuando llega a cero la oferta
+  // desaparece de verdad: un contador que expira y deja el botón puesto es una
+  // mentira, y esta página ya arrastra el problema de haber mostrado un precio
+  // tachado que no existía.
+  useEffect(() => {
+    if (!esSendura || upsellAdded || upsellDismissed || yaLlevaJabon) return;
+    const fin = Date.now() + VENTANA_SENDURA_MS;
+    setRestanteMs(VENTANA_SENDURA_MS);
+    const t = setInterval(() => {
+      const queda = fin - Date.now();
+      setRestanteMs(queda > 0 ? queda : 0);
+      if (queda <= 0) {
+        clearInterval(t);
+        setUpsellDismissed(true);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [esSendura, upsellAdded, upsellDismissed, yaLlevaJabon]);
 
   const handleUpsell = async () => {
     if (!orderId || upsellAdded || upsellLoading) return;
@@ -436,6 +517,7 @@ export default function ThankYouClient() {
                     </div>
                   ) : (
                     <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      {mostrarContador && <ContadorOferta restanteMs={restanteMs!} />}
                       {/* Fila: imagen + info */}
                       <div className="flex items-center gap-3 p-3">
                         <div className="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden bg-gray-100 border border-gray-200">

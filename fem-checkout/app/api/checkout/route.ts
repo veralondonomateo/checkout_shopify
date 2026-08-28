@@ -4,6 +4,8 @@ import MercadoPagoConfig, { Preference } from "mercadopago";
 import { OrderItem } from "@/types/checkout";
 import { createServerClient } from "@/lib/supabase";
 import { sendPurchaseEvent } from "@/lib/meta";
+import { coberturaSendura } from "@/lib/cobertura-sendura";
+import { senduraActivo } from "@/lib/despacho";
 import { COUPON_CODES, COUPON_USAGE_LIMITS } from "@/lib/coupons";
 import { soloPagoAnticipado, MENSAJE_SOLO_PAGO_ANTICIPADO } from "@/lib/zonas-pago-anticipado";
 
@@ -366,10 +368,20 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
+    // La página de gracias necesita saber por dónde va a salir el pedido: con
+    // Sendura la ventana del upsell es más larga, porque su API no permite
+    // añadir un producto a una guía ya creada. Es una pista para la interfaz;
+    // la decisión de verdad la vuelve a tomar el servidor al despachar.
+    const destino =
+      senduraActivo() && coberturaSendura(body.state, body.city).cubierta
+        ? "sendura"
+        : "shopify";
+
     return NextResponse.json({
       type: "contraentrega",
       status: "approved",
       order_id: orderId,
+      destino,
     });
   }
 

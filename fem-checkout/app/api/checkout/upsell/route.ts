@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { findProductBySku, findProductByTitle, addLineItemToShopifyOrder } from "@/lib/shopify";
 import { VARIANT_IDS } from "@/lib/catalog";
+import { REVISAR_PREFIX } from "@/lib/despacho";
+import { sendAlert } from "@/lib/alert";
 
 const JABON = {
   product_id: "jabon-intimo-prebioticos",
@@ -138,12 +140,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Añadir como line item real en la orden de Shopify (Order Editing API)
+  // Añadir como line item real en la orden ya creada.
   const { data: ord } = await supabase
     .from("orders")
-    .select("shopify_order_id")
+    .select("shopify_order_id, sendura_order_id, sendura_guia")
     .eq("id", order_id)
     .single();
+
+  // Sendura no expone forma de editar una guía ya emitida. Si el pedido salió
+  // por ahí antes de que la clienta aceptara el jabón, lo tenemos cobrado y
+  // ellos no saben que hay que meterlo: se marca para revisión y sale en rojo
+  // arriba del dashboard. La ventana del upsell está pensada para que esto no
+  // ocurra —el pedido no se despacha hasta que ella decide—, pero queda como
+  // red por si el cron de rescate se adelanta.
+  if (ord?.sendura_order_id) {
+    const aviso = `${REVISAR_PREFIX}: la clienta añadió el jabón después de que el pedido saliera por Sendura (guía ${ord.sendura_guia ?? "—"}). Está cobrado pero no va en la guía: hay que añadirlo con ellos o devolver los ${JABON.price}.`;
+    console.error(`[Upsell] ${order_id}: ${aviso}`);
+    await supabase.from("orders").update({ sendura_error: aviso }).eq("id", order_id);
+    sendAlert(`[Upsell] Orden ${order_id}: ${aviso}`).catch(() => {});
+    return NextResponse.json({ ok: true, en_revision: true });
+  }
 
   if (ord?.shopify_order_id) {
     try {

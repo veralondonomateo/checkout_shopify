@@ -280,6 +280,8 @@ export default function CheckoutForm({
         items: allItems,
         total,
         paymentMethod: data.paymentMethod,
+        // Lo manda el servidor; solo llega en contraentrega.
+        destino: result.destino ?? null,
       }));
 
       if (result.type === "contraentrega") {

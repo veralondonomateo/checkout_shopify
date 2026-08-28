@@ -223,12 +223,13 @@ export async function GET(req: NextRequest) {
     // Pedidos detenidos porque Sendura no respondió y la guía puede existir.
     // No dependen del rango: si hay uno, hay que verlo siempre — este proyecto
     // no tiene alertas, así que el dashboard es el único sitio donde aparecen.
+    // Sin filtrar por "no despachado": hay un caso marcado REVISAR que sí tiene
+    // guía —el jabón del upsell añadido después de que el pedido saliera por
+    // Sendura—. Ese también hay que verlo, así que manda la marca, no el estado.
     const { data: revision } = await supabase
       .from("orders")
       .select("id,created_at,city,state,total,sendura_error")
       .ilike("sendura_error", "REVISAR:%")
-      .is("shopify_order_id", null)
-      .is("sendura_order_id", null)
       .order("created_at", { ascending: false })
       .limit(50);
 

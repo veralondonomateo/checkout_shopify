@@ -342,29 +342,32 @@ function AvisoRevision({ pedidos }: { pedidos: PedidoEnRevision[] }) {
           {pedidos.length} pedido{pedidos.length === 1 ? "" : "s"} sin despachar, esperando revisión
         </p>
         <p className="text-[11px] text-red-700 mt-0.5">
-          Sendura no respondió a tiempo, así que la guía puede existir o no. No se
-          mandaron a Shopify para no arriesgar una doble entrega. Búscalos en el panel
-          de Sendura: si la guía está, ya van en camino; si no, hay que rehacerlos.
+          Algo quedó a medias con Sendura y hay que mirarlo a mano. El motivo va en
+          cada fila: puede ser que no respondieran a tiempo y la guía exista o no —ahí
+          no se mandó a Shopify para no arriesgar una doble entrega—, o que la clienta
+          añadiera el jabón después de que el pedido ya hubiera salido.
         </p>
       </div>
-      <table className="w-full text-xs">
-        <tbody>
-          {pedidos.map((p) => (
-            <tr key={p.id} className="border-b border-gray-100 last:border-0">
-              <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
-                {p.created_at.slice(0, 16).replace("T", " ")}
-              </td>
-              <td className="px-4 py-2 text-gray-900">
+      <ul className="divide-y divide-gray-100">
+        {pedidos.map((p) => (
+          <li key={p.id} className="px-4 py-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <span className="text-xs text-gray-900">
                 {p.city} <span className="text-gray-400">· {p.state}</span>
-              </td>
-              <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">
+              </span>
+              <span className="text-xs tabular-nums font-semibold text-gray-900">
                 {moneda(p.total ?? 0)}
-              </td>
-              <td className="px-4 py-2 font-mono text-[10px] text-gray-400">{p.id.slice(0, 8)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-600 leading-snug mt-1">
+              {(p.sendura_error ?? "").replace(/^REVISAR:\s*/, "")}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-1 font-mono">
+              {p.created_at.slice(0, 16).replace("T", " ")} · {p.id.slice(0, 8)}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
