@@ -92,6 +92,7 @@ const INDICE = [
   ["webhook", "Webhook (opcional)"],
   ["link", "Link de recuperación"],
   ["reglas", "Reglas obligatorias"],
+  ["pedidos-sendura", "Aviso de Sendura (pedidos nuevos)"],
   ["integracion", "Integración paso a paso"],
   ["configuracion", "Configuración"],
   ["errores", "Errores"],
@@ -103,8 +104,8 @@ export default function DocumentacionPage() {
       <header className="border-b border-gray-200 bg-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">API de carritos abandonados</h1>
-            <p className="text-xs text-gray-500">Checkout FEM · para integración con el CRM</p>
+            <h1 className="text-lg font-bold text-gray-900">API del checkout para el CRM</h1>
+            <p className="text-xs text-gray-500">Checkout FEM · carritos abandonados y aviso de Sendura</p>
           </div>
           <span className="text-xs font-mono text-gray-400 hidden sm:block">v1</span>
         </div>
@@ -464,6 +465,152 @@ Variable {{1}}: o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc
             </Aviso>
           </Seccion>
 
+          <Seccion id="pedidos-sendura" titulo="Aviso de Sendura (pedidos nuevos)">
+            <Aviso tipo="alerta">
+              <strong>Para qué existe esto.</strong> Cuando un pedido sale por Sendura, ellos
+              llaman a la clienta desde un número que no conoce para coordinar la entrega. Mucha
+              gente se asusta —&laquo;¿de dónde sacaron mi teléfono?&raquo;— desconfía y hasta
+              rechaza el pedido. El CRM le escribe antes por WhatsApp avisándole de que esa
+              llamada va a llegar y de quién es.
+            </Aviso>
+
+            <p className="text-gray-600 leading-relaxed mb-4">
+              Esta cola es <strong>independiente de la de carritos abandonados</strong>. Aquí no
+              hay gente que no compró: son pedidos <strong>confirmados y ya despachados</strong>.
+              Los que salen por Shopify viajan igual pero marcados, porque el CRM ya tiene su
+              propio flujo para esos; los que hay que trabajar son los de Sendura.
+            </p>
+
+            <Aviso>
+              <strong>Solo aparecen pedidos ya despachados.</strong> Antes del despacho la
+              transportadora todavía no está decidida: el ruteo se resuelve en ese momento y un
+              fallo de Sendura manda el pedido a Shopify. Avisar antes sería avisar de algo que
+              puede cambiar. En contraentrega el despacho ocurre entre 1 y 20 minutos después de
+              la compra; en pago anticipado, en cuanto se acredita el pago.
+            </Aviso>
+
+            <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-3">Listar pedidos</h3>
+            <Metodo verbo="GET" ruta="/api/crm/pedidos?transportadora=sendura&cursor=<n>&limite=50" />
+            <Tabla
+              cabeceras={["Parámetro", "Descripción"]}
+              filas={[
+                [<code key="a">cursor</code>, "El número que devolvió la llamada anterior. Sin él empieza por el principio de la cola."],
+                [<code key="b">transportadora</code>, <span key="b2"><code>sendura</code> o <code>shopify</code>. Para este flujo, siempre <code>sendura</code>.</span>],
+                [<code key="c">desde</code>, "Solo pedidos despachados después de ese instante (ISO 8601)."],
+                [<code key="d">limite</code>, "1 a 200. Por defecto 50."],
+              ]}
+            />
+
+            <p className="text-gray-600 leading-relaxed mb-2">Respuesta:</p>
+            <Codigo>{`{
+  "pedidos": [
+    {
+      "id": "8f3a...",
+      "transportadora": "sendura",
+      "guia": "830146719870",
+      "referencia_operador": "61689",
+      "cliente": {
+        "nombre": "Ana",
+        "nombre_completo": "Ana Ruiz",
+        "telefono": "+57 310 778 7191",
+        "telefono_local": "573107787191",
+        "email": "ana@gmail.com",
+        "cedula": "1020...",
+        "direccion": "Carrera 13 # 12-09",
+        "complemento": "Apto 301",
+        "ciudad": "Medellín",
+        "departamento": "Antioquia"
+      },
+      "productos": [
+        { "nombre": "Alimento con probióticos", "variante": "1 unidad", "cantidad": 1, "precio": 110000 }
+      ],
+      "subtotal": 110000, "envio": 0, "descuento": 11000,
+      "cupon": "NEW10", "total": 99000,
+      "metodo_pago": "contraentrega",
+      "creado_at": "2026-09-04T15:02:11.000Z",
+      "despachado_at": "2026-09-04T15:04:38.000Z",
+      "avisado_at": null,
+      "debe_avisar": true
+    }
+  ],
+  "cursor": 1842,
+  "cantidad": 1,
+  "hay_mas": false
+}`}</Codigo>
+
+            <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-3">Revalidar antes de escribir</h3>
+            <Metodo verbo="GET" ruta="/api/crm/pedidos/{id}" />
+            <p className="text-gray-600 leading-relaxed mb-4">
+              Devuelve el pedido con <code>debe_avisar</code> recalculado. Es obligatorio
+              consultarlo <strong>justo antes de mandar el mensaje</strong>: si otro proceso ya
+              avisó, viene en <code>false</code> y no hay que mandar nada. Sin esta revalidación,
+              un CRM que reintente una tanda le escribe dos veces a la misma persona.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-3">Reportar el aviso</h3>
+            <Metodo verbo="POST" ruta="/api/crm/pedidos/{id}/eventos" />
+            <Codigo>{`{ "evento": "aviso_enviado" }`}</Codigo>
+            <p className="text-gray-600 leading-relaxed mb-4">
+              Sella <code>avisado_at</code> y hace <code>debe_avisar</code> false a partir de ese
+              momento. Hay que llamarlo <strong>siempre</strong> después de enviar el mensaje: es
+              lo único que impide que la misma clienta reciba el aviso dos veces si el cursor del
+              CRM se pierde. Si el pedido ya estaba avisado responde{" "}
+              <code>{`{ "ok": true, "ya_estaba": true }`}</code> y no pisa la hora original.
+            </p>
+
+            <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-3">El mensaje</h3>
+            <p className="text-gray-600 leading-relaxed mb-4">
+              Se manda <strong>lo antes posible tras el despacho</strong>: tiene que llegar antes
+              que la llamada de Sendura, que es justo lo que se quiere evitar que sorprenda. Corto,
+              con el nombre de la clienta y nombrando a Sendura de forma explícita.
+            </p>
+            <Codigo>{`Hola {nombre} 👋 Tu pedido quedó confirmado ✅
+
+Lo vamos a enviar con Sendura, nuestra transportadora de última milla,
+para que te llegue mucho más rápido 🛵
+
+Ellos se van a comunicar contigo para coordinar la entrega.
+¡Gracias por tu compra! 💜`}</Codigo>
+            <Aviso>
+              <strong>Nombrar a Sendura es el punto.</strong> El mensaje existe para que, cuando
+              llegue una llamada de un número desconocido diciendo que son Sendura, la clienta ya
+              sepa quiénes son. Si el mensaje no dice el nombre, no sirve para nada.
+            </Aviso>
+
+            <h3 className="text-lg font-semibold text-gray-900 mt-8 mb-3">Reglas</h3>
+            <ol className="list-decimal list-inside space-y-2 text-gray-600 leading-relaxed">
+              <li>
+                Enviar <strong>solo</strong> a <code>transportadora: "sendura"</code>. Los de
+                Shopify ya tienen su flujo en el CRM.
+              </li>
+              <li>
+                Revalidar con <code>GET /api/crm/pedidos/{"{id}"}</code> y comprobar{" "}
+                <code>debe_avisar</code> antes de cada mensaje.
+              </li>
+              <li>
+                Reportar <code>aviso_enviado</code> siempre después de enviar.
+              </li>
+              <li>
+                <strong>Un solo mensaje por pedido.</strong> Esto no es una secuencia de
+                recuperación: es un aviso. Si la misma clienta hace dos pedidos, recibe dos
+                avisos, uno por cada uno.
+              </li>
+              <li>
+                Guardar el <code>cursor</code> de cada llamada. Es lo que evita releer la cola
+                entera y volver a avisar a todo el mundo.
+              </li>
+              <li>
+                No hay horario nocturno bloqueado como en carritos, porque el aviso pierde sentido
+                si llega después de la llamada. Aun así, conviene no escribir de madrugada.
+              </li>
+            </ol>
+
+            <Aviso>
+              <strong>La cola arranca vacía.</strong> Los pedidos despachados antes de que esto
+              existiera no entran: avisar hoy de una compra de la semana pasada solo confundiría.
+              Solo aparecen los pedidos despachados a partir de la puesta en marcha.
+            </Aviso>
+          </Seccion>
           <Seccion id="integracion" titulo="Integración paso a paso">
             <p className="text-gray-600 leading-relaxed">
               El CRM necesita dos procesos: uno que lee la cola y otro que envía los mensajes
