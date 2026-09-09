@@ -63,9 +63,9 @@ export const metadata = {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string; variant?: string; qty?: string }>;
+  searchParams: Promise<{ product?: string; variant?: string; qty?: string; elegir?: string }>;
 }) {
-  const { product, variant, qty } = await searchParams;
+  const { product, variant, qty, elegir } = await searchParams;
   const initialVariantId = variant ? parseInt(variant, 10) || undefined : undefined;
   const initialQty = qty ? Math.max(1, parseInt(qty, 10) || 1) : undefined;
 
@@ -180,6 +180,16 @@ export default async function CheckoutPage({
         ovulosProduct={toCheckoutProduct(ovulosProduct ?? null)}
         initialVariantId={resolvedVariantId}
         initialQty={initialQty}
+        catalogo={
+          // Solo se manda con `?elegir=1`: fuera de las campañas con cupón el
+          // cliente no necesita el catálogo y no hay por qué engordar el HTML
+          // de todas las visitas del checkout.
+          elegir === "1"
+            ? allProducts
+                .filter((p) => p.variants.length > 0)
+                .map((p) => toCheckoutProduct(p)!)
+            : undefined
+        }
       />
     </Suspense>
   );

@@ -11,6 +11,8 @@ import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
 import { asegurarIdsMeta } from "@/lib/meta-tracking";
 import { COUPON_CODES } from "@/lib/coupons";
+import SelectorProductos from "./SelectorProductos";
+import TemporizadorCupon from "./TemporizadorCupon";
 import { VARIANT_IDS, PRINCIPAL_FALLBACK_PRICE } from "@/lib/catalog";
 
 // Último recurso: solo se usa si Shopify no respondió y el servidor no pudo
@@ -96,14 +98,34 @@ interface CheckoutPageClientProps {
   ovulosProduct?: CheckoutProduct | null;
   initialVariantId?: number;
   initialQty?: number;
+  /** Catálogo para el selector de campaña. Solo llega con `?elegir=1`. */
+  catalogo?: CheckoutProduct[];
 }
 
-export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty, catalogo }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
-  const MAIN_ITEMS: OrderItem[] = shopifyProduct
-    ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
+
+  // Modo campaña: el producto deja de venir fijo de la URL y lo elige la
+  // clienta. Sin `?elegir=1` este estado nunca cambia, así que el checkout de
+  // siempre se comporta exactamente igual que antes.
+  const modoEleccion = searchParams.get("elegir") === "1" && (catalogo?.length ?? 0) > 0;
+  const [productoElegido, setProductoElegido] = useState<CheckoutProduct | null>(
+    shopifyProduct ?? null
+  );
+  const [varianteElegida, setVarianteElegida] = useState<number | undefined>(initialVariantId);
+
+  const MAIN_ITEMS: OrderItem[] = productoElegido
+    ? [shopifyProductToItem(productoElegido, varianteElegida)]
     : [DEFAULT_ITEM];
   const mainVariantId = MAIN_ITEMS[0]?.shopifyVariantId;
+
+  const elegirProducto = (p: CheckoutProduct) => {
+    setProductoElegido(p);
+    // La variante anterior es de otro producto: se descarta para que
+    // `shopifyProductToItem` caiga en la primera del nuevo.
+    setVarianteElegida(undefined);
+    setMainQty(1);
+  };
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
   const [mainQty, setMainQty] = useState(initialQty ?? 1);
@@ -186,11 +208,11 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
     // realmente usa; el handle queda como respaldo.
     return filled.filter((p) => {
       if (mainVariantId && p.shopifyVariantId === mainVariantId) return false;
-      if (p.shopifyHandle === shopifyProduct?.handle) return false;
+      if (p.shopifyHandle === productoElegido?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
       return true;
     });
-  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, mainVariantId]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, productoElegido, mainVariantId]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>
@@ -226,6 +248,28 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   return (
     <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
       <CheckoutHeader />
+
+      {modoEleccion && (
+        <>
+          {couponApplied && cuponUrlValido && (
+            <TemporizadorCupon
+              codigo={cuponUrlValido}
+              onExpirar={() => {
+                // Se quita el descuento de verdad. Ver la nota del componente:
+                // el servidor no impone la caducidad, así que quien reescriba
+                // el código lo vuelve a aplicar. Es urgencia, no candado.
+                setCouponApplied(false);
+                setCoupon("");
+              }}
+            />
+          )}
+          <SelectorProductos
+            catalogo={catalogo ?? []}
+            seleccionadoId={productoElegido?.id ?? null}
+            onElegir={elegirProducto}
+          />
+        </>
+      )}
 
       {mpStatus === "success" && (
         <div className="max-w-6xl mx-auto px-4 mt-6">
