@@ -11,7 +11,7 @@ import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
 import { asegurarIdsMeta } from "@/lib/meta-tracking";
 import { COUPON_CODES } from "@/lib/coupons";
-import SelectorProductos from "./SelectorProductos";
+import SelectorProductos, { precioDe } from "./SelectorProductos";
 import TemporizadorCupon from "./TemporizadorCupon";
 import { VARIANT_IDS, PRINCIPAL_FALLBACK_PRICE } from "@/lib/catalog";
 
@@ -109,23 +109,46 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   // clienta. Sin `?elegir=1` este estado nunca cambia, así que el checkout de
   // siempre se comporta exactamente igual que antes.
   const modoEleccion = searchParams.get("elegir") === "1" && (catalogo?.length ?? 0) > 0;
-  const [productoElegido, setProductoElegido] = useState<CheckoutProduct | null>(
-    shopifyProduct ?? null
-  );
-  const [varianteElegida, setVarianteElegida] = useState<number | undefined>(initialVariantId);
 
-  const MAIN_ITEMS: OrderItem[] = productoElegido
-    ? [shopifyProductToItem(productoElegido, varianteElegida)]
+  // Cantidad por producto del selector. Arranca con el producto del link ya
+  // dentro, para que quien llega no vea un carrito vacío.
+  const [cantidades, setCantidades] = useState<Record<string, number>>(() =>
+    shopifyProduct ? { [String(shopifyProduct.id)]: 1 } : {}
+  );
+
+  const agregarProducto = (p: CheckoutProduct) =>
+    setCantidades((c) => ({ ...c, [String(p.id)]: (c[String(p.id)] ?? 0) + 1 }));
+
+  const quitarProducto = (p: CheckoutProduct) =>
+    setCantidades((c) => {
+      const n = (c[String(p.id)] ?? 0) - 1;
+      const copia = { ...c };
+      // Se borra la clave en vez de dejarla en 0: así `cantidades` refleja
+      // exactamente lo que hay en el carrito y no hay que filtrar ceros.
+      if (n <= 0) delete copia[String(p.id)];
+      else copia[String(p.id)] = n;
+      return copia;
+    });
+
+  // Fuera del modo campaña manda el producto del link, como siempre.
+  const MAIN_ITEMS: OrderItem[] = shopifyProduct
+    ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
     : [DEFAULT_ITEM];
   const mainVariantId = MAIN_ITEMS[0]?.shopifyVariantId;
 
-  const elegirProducto = (p: CheckoutProduct) => {
-    setProductoElegido(p);
-    // La variante anterior es de otro producto: se descarta para que
-    // `shopifyProductToItem` caiga en la primera del nuevo.
-    setVarianteElegida(undefined);
-    setMainQty(1);
-  };
+  /** Lo que el selector aporta al carrito, en el orden del catálogo. */
+  const itemsSeleccion = useMemo<OrderItem[]>(() => {
+    if (!modoEleccion) return [];
+    return (catalogo ?? [])
+      .filter((p) => (cantidades[String(p.id)] ?? 0) > 0)
+      .map((p) => ({
+        ...shopifyProductToItem(p),
+        price: precioDe(p),
+        quantity: cantidades[String(p.id)],
+      }));
+  }, [modoEleccion, catalogo, cantidades]);
+
+  const carritoVacio = modoEleccion && itemsSeleccion.length === 0;
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
   const [mainQty, setMainQty] = useState(initialQty ?? 1);
@@ -208,20 +231,20 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
     // realmente usa; el handle queda como respaldo.
     return filled.filter((p) => {
       if (mainVariantId && p.shopifyVariantId === mainVariantId) return false;
-      if (p.shopifyHandle === productoElegido?.handle) return false;
+      if (p.shopifyHandle === shopifyProduct?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
       return true;
     });
-  }, [gomitasProduct, jabonProduct, ovulosProduct, productoElegido, mainVariantId]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, mainVariantId]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>
     setUpsellQty((prev) => ({ ...prev, [id]: prev[id] ? 0 : 1 }));
 
   const allItems = useMemo<OrderItem[]>(() => {
-    const mainWithQty = MAIN_ITEMS.map((item, i) =>
-      i === 0 ? { ...item, quantity: mainQty } : item
-    );
+    const mainWithQty = modoEleccion
+      ? itemsSeleccion
+      : MAIN_ITEMS.map((item, i) => (i === 0 ? { ...item, quantity: mainQty } : item));
     const added = UPSELL_PRODUCTS.filter((p) => (upsellQty[p.id] ?? 0) > 0).map((p) => ({
       id: p.id,
       name: p.name,
@@ -232,7 +255,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       shopifyVariantId: p.shopifyVariantId,
     }));
     return [...mainWithQty, ...added];
-  }, [upsellQty, mainQty, UPSELL_PRODUCTS]);
+  }, [upsellQty, mainQty, UPSELL_PRODUCTS, modoEleccion, itemsSeleccion]);
 
   const subtotal = useMemo(
     () => allItems.reduce((sum, i) => sum + i.price * i.quantity, 0),
@@ -265,8 +288,9 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
           )}
           <SelectorProductos
             catalogo={catalogo ?? []}
-            seleccionadoId={productoElegido?.id ?? null}
-            onElegir={elegirProducto}
+            cantidades={cantidades}
+            onAgregar={agregarProducto}
+            onQuitar={quitarProducto}
           />
         </>
       )}
@@ -326,6 +350,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 items-start">
           <CheckoutForm
             allItems={allItems}
+            carritoVacio={carritoVacio}
             subtotal={subtotal}
             shipping={0}
             total={total}

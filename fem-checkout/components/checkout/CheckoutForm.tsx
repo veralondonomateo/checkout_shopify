@@ -53,6 +53,8 @@ type FormData = z.infer<typeof schema>;
 
 interface CheckoutFormProps {
   allItems: OrderItem[];
+  /** Modo campaña con el carrito vacío: no hay nada que cobrar. */
+  carritoVacio?: boolean;
   subtotal: number;
   shipping: number;
   total: number;
@@ -69,6 +71,7 @@ interface CheckoutFormProps {
 
 export default function CheckoutForm({
   allItems,
+  carritoVacio = false,
   subtotal,
   shipping,
   total,
@@ -375,10 +378,10 @@ export default function CheckoutForm({
           type="submit"
           fullWidth
           loading={isSubmitting}
-          disabled={!hydrated}
+          disabled={!hydrated || carritoVacio}
           className="text-base py-4"
         >
-          {isSubmitting ? "Procesando..." : (
+          {carritoVacio ? "Agrega un producto para continuar" : isSubmitting ? "Procesando..." : (
             <span className="flex items-center gap-2">
               <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />

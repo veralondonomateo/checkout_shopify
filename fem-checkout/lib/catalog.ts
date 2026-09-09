@@ -26,3 +26,26 @@ export const VARIANT_IDS = {
 
 /** Precio de lista del producto principal, si Shopify no responde. */
 export const PRINCIPAL_FALLBACK_PRICE = 110000;
+
+/**
+ * Productos que se ofrecen en el selector de campaña (`?elegir=1`).
+ *
+ * Es una lista cerrada y a mano, no todo el catálogo: en una campaña se
+ * enseña lo que se quiere vender, no las 20 variantes que existen en Shopify.
+ * Se resuelven por ID de variante y no por nombre ni precio, porque ambos
+ * cambian —el jabón pasó de 29.900 a 46.900 y los óvulos de 45.000 a 84.900
+ * sin cambiar de variante— y filtrar por ellos dejaría la campaña rota en
+ * silencio el día que alguien ajuste un precio.
+ *
+ * El orden de esta lista es el orden en que aparecen las tarjetas.
+ */
+export const VARIANTES_CAMPANA: readonly number[] = [
+  43659069325400, // Alimento con probióticos y prebióticos x 60 UND
+  44041401598040, // Combo Probiótico + Six pack de Soda Prebiótica
+  43661534298200, // Fem Mom x 60 tabletas
+  43087005352024, // Soda Prebiótica x 6 UND
+  43665049747544, // Óvulos Fem x 6 UND
+  43661845299288, // Jabón íntimo pH neutro x 200 ml
+  43665105748056, // Gomitas con fenogreco x 60 UND
+  43429476008024, // Combo Completo
+] as const;

@@ -3,7 +3,7 @@ import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
 import CheckoutHeader from "@/components/checkout/CheckoutHeader";
 import { getProducts, getProductByHandle, getProductByHandleFresh, ShopifyProduct } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
-import { VARIANT_IDS } from "@/lib/catalog";
+import { VARIANT_IDS, VARIANTES_CAMPANA } from "@/lib/catalog";
 
 /** Reduce el producto a lo que el cliente realmente renderiza. */
 function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
@@ -185,9 +185,16 @@ export default async function CheckoutPage({
           // cliente no necesita el catálogo y no hay por qué engordar el HTML
           // de todas las visitas del checkout.
           elegir === "1"
-            ? allProducts
-                .filter((p) => p.variants.length > 0)
-                .map((p) => toCheckoutProduct(p)!)
+            ? // Lista cerrada y en el orden de VARIANTES_CAMPANA: en una campaña
+              // se enseña lo que se quiere vender, no el catálogo entero. Cada
+              // producto se reduce a la variante concreta que se ofrece, para
+              // que el precio de la tarjeta sea el que se va a cobrar.
+              VARIANTES_CAMPANA.map((vid) => {
+                const prod = allProducts.find((p) => p.variants.some((v) => v.id === vid));
+                if (!prod) return null;
+                const variante = prod.variants.find((v) => v.id === vid)!;
+                return toCheckoutProduct({ ...prod, variants: [variante] });
+              }).filter((p): p is NonNullable<typeof p> => p !== null)
             : undefined
         }
       />
