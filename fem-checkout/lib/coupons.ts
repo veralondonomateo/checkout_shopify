@@ -15,6 +15,7 @@ export const COUPON_CODES: Record<string, number> = {
   AIDA: 0.2,
   NEW10: 0.1,
   QUIEROFEM: 0.1,
+  AMORXFEM: 0.2,
   // Exclusivo de la recuperación de carritos por WhatsApp. Va aparte de FEM10
   // para poder medir cuántas ventas trajo esa operación y poder apagarlo sin
   // tocar los cupones que se usan en otros canales.
