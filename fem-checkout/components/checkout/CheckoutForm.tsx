@@ -67,7 +67,16 @@ interface CheckoutFormProps {
   discount: number;
   onCouponChange: (value: string) => void;
   onCouponApply: () => void;
+  /** El servidor rechazó el cupón: hay que quitarlo para que el pedido salga. */
+  onCouponRejected: (mensaje: string) => void;
 }
+
+/**
+ * Error cuyo texto ya viene redactado por el servidor y se puede mostrar tal
+ * cual. Sirve para separarlo de las caídas de red, donde el mensaje genérico
+ * es lo correcto porque no hay nada que la clienta pueda cambiar.
+ */
+class ErrorDelServidor extends Error {}
 
 export default function CheckoutForm({
   allItems,
@@ -84,6 +93,7 @@ export default function CheckoutForm({
   discount,
   onCouponChange,
   onCouponApply,
+  onCouponRejected,
 }: CheckoutFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -271,7 +281,38 @@ export default function CheckoutForm({
         }),
       });
 
-      if (!res.ok) throw new Error("Error del servidor");
+      if (!res.ok) {
+        // El servidor explica por qué rechazó el pedido. Antes ese motivo se
+        // descartaba y todo terminaba en el mismo "ocurrió un error": quien
+        // traía un cupón ya usado reintentaba una y otra vez sin saber qué
+        // cambiar, y la venta se perdía entera.
+        const detalle = await res.json().catch(() => null);
+
+        // Solo se muestra el texto que el servidor marcó como mostrable con un
+        // `codigo`. Los otros fallos ("Cuerpo inválido", "Total inconsistente")
+        // describen estados internos que la clienta no provocó y que no le
+        // dicen qué hacer: para esos sigue el mensaje genérico de siempre.
+        const codigo = typeof detalle?.codigo === "string" ? detalle.codigo : null;
+        const mensaje =
+          codigo && typeof detalle?.error === "string" && detalle.error
+            ? detalle.error
+            : null;
+
+        if (codigo?.startsWith("cupon_") && mensaje) {
+          // Se quita el descuento para desatascar el pedido, pero NO se cobra
+          // solo: el resumen pasa a mostrar el total sin rebaja y hace falta
+          // otro toque en "Pagar". Nadie termina pagando algo que no vio.
+          onCouponRejected(mensaje);
+          setSubmitError(
+            `${mensaje} Quitamos el descuento — revisa el total y confirma de nuevo.`
+          );
+          inFlight.current = false;
+          setIsSubmitting(false);
+          return;
+        }
+
+        throw mensaje ? new ErrorDelServidor(mensaje) : new Error("Error del servidor");
+      }
 
       const result = await res.json();
 
@@ -296,7 +337,11 @@ export default function CheckoutForm({
       }
     } catch (err) {
       console.error("Checkout error:", err);
-      setSubmitError("Ocurrió un error al procesar tu pedido. Por favor intenta de nuevo.");
+      setSubmitError(
+        err instanceof ErrorDelServidor
+          ? err.message
+          : "Ocurrió un error al procesar tu pedido. Por favor intenta de nuevo."
+      );
       // Solo se libera el bloqueo cuando hubo error: en el camino feliz la
       // página se está redirigiendo y el botón debe seguir inhabilitado.
       inFlight.current = false;

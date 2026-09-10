@@ -110,7 +110,13 @@ export async function POST(req: NextRequest) {
     const code = body.couponCode.trim().toUpperCase();
     const rate = COUPON_CODES[code];
     if (rate === undefined) {
-      return NextResponse.json({ error: "Código de descuento inválido" }, { status: 400 });
+      // `codigo` es para el navegador, no para la clienta: le permite
+      // distinguir "el problema es el cupón" de cualquier otro fallo y quitarlo
+      // en vez de dejar el pedido atascado. El texto de `error` sí se muestra.
+      return NextResponse.json(
+        { error: "Ese código de descuento no existe.", codigo: "cupon_invalido" },
+        { status: 400 }
+      );
     }
 
     const usageLimit = COUPON_USAGE_LIMITS[code];
@@ -130,7 +136,10 @@ export async function POST(req: NextRequest) {
 
       if ((usageCount ?? 0) >= usageLimit) {
         return NextResponse.json(
-          { error: "Ya alcanzaste el límite de usos de este cupón" },
+          {
+            error: "Ya usaste este cupón antes y es de uso limitado.",
+            codigo: "cupon_limite",
+          },
           { status: 400 }
         );
       }

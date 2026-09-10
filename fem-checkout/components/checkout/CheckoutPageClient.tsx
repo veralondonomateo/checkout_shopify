@@ -194,6 +194,15 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
     }
   };
 
+  // El navegador solo sabe si el código existe; quién ya lo gastó lo sabe el
+  // servidor. Cuando lo rechaza se quita el descuento y se dice por qué, para
+  // que la clienta pueda terminar la compra en vez de quedarse reintentando.
+  const handleCouponRejected = (mensaje: string) => {
+    setCouponApplied(false);
+    setCoupon("");
+    setCouponError(mensaje);
+  };
+
   const handleCouponChange = (value: string) => {
     setCoupon(value);
     setCouponError("");
@@ -362,6 +371,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
             couponError={couponError}
             onCouponChange={handleCouponChange}
             onCouponApply={handleApplyCoupon}
+            onCouponRejected={handleCouponRejected}
             discount={discount}
           />
 
