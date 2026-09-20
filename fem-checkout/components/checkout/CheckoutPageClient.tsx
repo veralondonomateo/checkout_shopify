@@ -148,6 +148,29 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       }));
   }, [modoEleccion, catalogo, cantidades]);
 
+  /**
+   * Variantes que la clienta ya lleva en el carrito.
+   *
+   * Fuera del modo campaña es una sola: la del link. En modo campaña son las
+   * que eligió arriba, y ahí está el motivo de que esto exista. El jabón, los
+   * óvulos y las gomitas se ofrecen **en los dos sitios**: en el selector de
+   * campaña y en el upsell de abajo. El filtro del upsell solo miraba el
+   * producto principal, así que quien agregaba el jabón arriba seguía viendo
+   * la oferta del jabón abajo y podía terminar con el mismo producto dos
+   * veces en el mismo pedido, a dos precios distintos.
+   */
+  const variantesEnCarrito = useMemo(() => {
+    const ids = new Set<number>();
+    if (modoEleccion) {
+      itemsSeleccion.forEach((i) => {
+        if (i.shopifyVariantId) ids.add(i.shopifyVariantId);
+      });
+    } else if (mainVariantId) {
+      ids.add(mainVariantId);
+    }
+    return ids;
+  }, [modoEleccion, itemsSeleccion, mainVariantId]);
+
   const carritoVacio = modoEleccion && itemsSeleccion.length === 0;
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
@@ -239,12 +262,12 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
     // distintos. Ahora manda el ID de variante, que es el dato que Shopify
     // realmente usa; el handle queda como respaldo.
     return filled.filter((p) => {
-      if (mainVariantId && p.shopifyVariantId === mainVariantId) return false;
+      if (p.shopifyVariantId && variantesEnCarrito.has(p.shopifyVariantId)) return false;
       if (p.shopifyHandle === shopifyProduct?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
       return true;
     });
-  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, mainVariantId]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, variantesEnCarrito]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>
