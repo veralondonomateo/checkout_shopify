@@ -35,7 +35,6 @@ interface CuerpoEC {
   complemento?: string;
   provincia: string;
   ciudad: string;
-  referencia?: string;
   presentacion: string;
   idempotencyKey?: string;
   eventSourceUrl?: string;
@@ -159,7 +158,6 @@ export async function POST(req: NextRequest) {
         complemento: body.complemento?.trim() || null,
         provincia: body.provincia.trim(),
         ciudad: body.ciudad.trim(),
-        referencia: body.referencia?.trim() || null,
         presentacion: presentacion.slug,
         unidades: presentacion.unidades,
         precio_unitario: presentacion.precio / presentacion.unidades,

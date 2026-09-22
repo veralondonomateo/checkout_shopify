@@ -41,12 +41,11 @@ interface Campos {
   complemento: string;
   provincia: string;
   ciudad: string;
-  referencia: string;
 }
 
 const VACIO: Campos = {
   email: "", nombre: "", apellido: "", cedula: "", telefono: "",
-  direccion: "", complemento: "", provincia: "", ciudad: "", referencia: "",
+  direccion: "", complemento: "", provincia: "", ciudad: "",
 };
 
 const slugify = (s: string) =>
@@ -272,11 +271,6 @@ export default function CheckoutEcuador({
                   error={errores.ciudad}
                 />
               </div>
-
-              <Input label="Referencia para llegar" optional
-                placeholder="Casa blanca, portón negro, frente al parque"
-                value={campos.referencia}
-                onChange={(e) => set("referencia")(e.target.value)} />
             </Seccion>
 
             <Seccion n={3} titulo="Método de pago">
