@@ -37,6 +37,7 @@ const MODULOS = [
   { href: "/admin", nombre: "Dashboard", descripcion: "Ventas y facturación" },
   { href: "/admin/links", nombre: "Links de productos", descripcion: "Enlaces de checkout" },
   { href: "/admin/descuentos", nombre: "Descuentos", descripcion: "Cupones y links de campaña" },
+  { href: "/admin/ecuador", nombre: "Ecuador", descripcion: "Links y pedidos en dólares" },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
