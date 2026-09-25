@@ -426,7 +426,8 @@ function firmaValida(cuerpoCrudo, cabeceras, secreto) {
             <Codigo>{`${BASE}/r/o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc`}</Codigo>
             <p className="text-gray-600 leading-relaxed">
               El token va firmado, así que nadie puede fabricar uno para ver los datos de otra
-              persona, y caduca a los 30 días. <strong>Manda el link tal como viene</strong>: si lo
+              persona. Los datos de la clienta se rellenan durante 30 días; los productos del carrito
+              se abren durante 90. <strong>Manda el link tal como viene</strong>: si lo
               cortas, deja de funcionar. El carrito se reconstruye al abrirse, en el servidor, así que
               funciona en el navegador de WhatsApp sin cookies ni sesión.
             </p>

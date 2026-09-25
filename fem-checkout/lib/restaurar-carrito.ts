@@ -20,8 +20,21 @@ import type { ShopifyProduct } from "@/lib/shopify";
  * rellena con un producto por defecto.
  */
 
-/** Días que el link sigue sirviendo desde que se creó el carrito. */
+/**
+ * Días que el link sigue rellenando los datos personales (nombre, celular,
+ * dirección). Corto a propósito: un link de WhatsApp vive para siempre en el
+ * chat y no queremos que dentro de seis meses siga sirviendo para leer una
+ * dirección.
+ */
 export const VIGENCIA_DIAS = Number(process.env.RECUPERACION_VIGENCIA_DIAS ?? 30);
+
+/**
+ * Días que el link sigue abriendo los productos del carrito. Más largo que el
+ * de los datos porque los productos no son datos personales; pasado este
+ * plazo los precios guardados pueden haberse quedado viejos y el carrito se da
+ * por caducado.
+ */
+export const VIGENCIA_CARRITO_DIAS = Number(process.env.CARRITO_VIGENCIA_DIAS ?? 90);
 
 export type MotivoNoDisponible =
   | "token_invalido"
@@ -220,7 +233,7 @@ export async function restaurarCarrito(
   if (guardadas.length === 0) return { disponible: false, motivo: "no_encontrado" };
 
   const edadDias = (Date.now() - new Date(creado).getTime()) / 86_400_000;
-  if (edadDias > VIGENCIA_DIAS) return { disponible: false, motivo: "caducado" };
+  if (edadDias > VIGENCIA_CARRITO_DIAS) return { disponible: false, motivo: "caducado" };
 
   // Además del origen, la cola sabe si la clienta terminó comprando por otro
   // camino (lo reconcilia el cron por teléfono).
