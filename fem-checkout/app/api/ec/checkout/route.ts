@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   }
   const presentacion = presentacionPorSlug(body.presentacion);
   const subtotal = presentacion.precio;
-  const total = subtotal + ENVIO_EC;
+  const total = Math.round((subtotal + ENVIO_EC) * 100) / 100;
 
   // ── Anti-duplicados ──────────────────────────────────────────────────────
   const idempotencyKey = body.idempotencyKey?.trim() || null;
@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
         ciudad: body.ciudad.trim(),
         presentacion: presentacion.slug,
         unidades: presentacion.unidades,
-        precio_unitario: presentacion.precio / presentacion.unidades,
+        precio_unitario: Math.round((presentacion.precio / presentacion.unidades) * 100) / 100,
         subtotal,
         envio: ENVIO_EC,
         total,
