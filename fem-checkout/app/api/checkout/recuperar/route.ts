@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import { verificarToken } from "@/lib/carritos";
+import { VIGENCIA_DIAS } from "@/lib/restaurar-carrito";
 
 /**
  * Devuelve los datos que la clienta ya había escrito, para que el link de
@@ -11,9 +12,6 @@ import { verificarToken } from "@/lib/carritos";
  * porque un link de WhatsApp vive para siempre en el chat y no queremos que
  * dentro de seis meses siga sirviendo para leer una dirección.
  */
-
-/** Días que el link sigue sirviendo desde que se creó el carrito. */
-const VIGENCIA_DIAS = Number(process.env.RECUPERACION_VIGENCIA_DIAS ?? 30);
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("t");

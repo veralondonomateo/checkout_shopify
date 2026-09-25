@@ -304,6 +304,36 @@ Se marca recuperado  ◄───────────────┘  POST .
                 [<code key="5" className="text-xs">null</code>, "Sin bloqueo: se puede contactar."],
               ]}
             />
+
+            <h3 className="font-semibold text-gray-900 mt-6 mb-2">Qué abre el link</h3>
+            <p className="text-gray-600 leading-relaxed">
+              El detalle trae además{" "}
+              <code className="text-sm bg-gray-100 px-1.5 py-0.5 rounded">link_restaura</code> y{" "}
+              <code className="text-sm bg-gray-100 px-1.5 py-0.5 rounded">link_descuento_restaura</code>:
+              el carrito que va a abrir cada link, calculado con la misma función que usa el
+              checkout. Si nombras productos en el mensaje, sácalos de aquí.
+            </p>
+            <Codigo>{`"link_restaura": {
+  "disponible": true,
+  "motivo": null,
+  "productos": [
+    { "nombre": "Alimento con probióticos + Jabón íntimo + Óvulos Fem homeopáticos",
+      "variante": null, "variant_id": 43640489869400, "cantidad": 1, "precio": 169900 }
+  ],
+  "subtotal": 169900,
+  "cupon": null,
+  "descuento": 0,
+  "total": 169900,
+  "coincide": true
+}`}</Codigo>
+            <Aviso tipo="alerta">
+              <strong>Si <code>coincide</code> es false, no mandes el mensaje.</strong> Significa que
+              el link abriría algo distinto de <code>productos</code> y <code>total</code>, o que el
+              carrito ya no se puede abrir (<code>motivo</code>: <code>caducado</code>,{" "}
+              <code>ya_comprado</code>, <code>producto_no_disponible</code>, <code>no_encontrado</code>).
+              En el link con descuento, <code>total</code> ya lleva el cupón, así que ahí{" "}
+              <code>coincide</code> solo compara los productos.
+            </Aviso>
           </Seccion>
 
           <Seccion id="eventos" titulo="Reportar eventos">
@@ -388,15 +418,17 @@ function firmaValida(cuerpoCrudo, cabeceras, secreto) {
           <Seccion id="link" titulo="Link de recuperación">
             <p className="text-gray-600 leading-relaxed">
               El campo <code className="text-sm bg-gray-100 px-1.5 py-0.5 rounded">link_recuperacion</code>{" "}
-              abre el checkout con el producto correcto y los datos que la clienta ya había escrito
-              (nombre, celular, dirección, ciudad). No tiene que volver a llenar nada.
+              abre el checkout con el carrito completo que la clienta dejó —todas las líneas, con su
+              variante, cantidad, precio y el cupón que tenía— y los datos que ya había escrito
+              (nombre, celular, dirección, ciudad). No tiene que volver a llenar nada. Si el carrito
+              ya no se puede abrir, la página lo dice; nunca abre otro producto en su lugar.
             </p>
             <Codigo>{`${BASE}/r/o.352801fb-a3c7-44a1-8f5d-023e2912f181.6cee0641d18587cc7cbc`}</Codigo>
             <p className="text-gray-600 leading-relaxed">
               El token va firmado, así que nadie puede fabricar uno para ver los datos de otra
               persona, y caduca a los 30 días. <strong>Manda el link tal como viene</strong>: si lo
-              cortas, deja de funcionar. La variante, la cantidad y el cupón los resuelve el propio
-              link al abrirse.
+              cortas, deja de funcionar. El carrito se reconstruye al abrirse, en el servidor, así que
+              funciona en el navegador de WhatsApp sin cookies ni sesión.
             </p>
 
             <h3 className="font-semibold text-gray-900 mt-6 mb-2">Con descuento</h3>
@@ -651,6 +683,12 @@ async function enviarMensaje(carritoId) {
     return;
   }
   if (carrito.mensajes_enviados >= 3) return;
+
+  // El link tiene que abrir justo lo que el mensaje nombra.
+  if (!carrito.link_restaura.coincide) {
+    console.log("Link no coincide:", carrito.link_restaura.motivo);
+    return;
+  }
 
   await whatsapp.enviar({
     para: carrito.telefono,

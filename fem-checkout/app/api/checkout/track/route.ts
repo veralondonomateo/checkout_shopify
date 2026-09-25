@@ -38,6 +38,9 @@ const esquema = z.object({
         variant: z.string().max(200).nullish(),
         price: z.number().nonnegative(),
         quantity: z.number().int().min(1).max(99),
+        // La variante exacta de la línea. Sin ella el link de recuperación
+        // tiene que deducirla del producto y el precio.
+        shopifyVariantId: z.number().int().positive().optional(),
       })
     )
     .max(20)

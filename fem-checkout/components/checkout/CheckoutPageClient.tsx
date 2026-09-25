@@ -100,15 +100,22 @@ interface CheckoutPageClientProps {
   initialQty?: number;
   /** Catálogo para el selector de campaña. Solo llega con `?elegir=1`. */
   catalogo?: CheckoutProduct[];
+  /**
+   * Carrito reconstruido desde un link de recuperación (`?r=`), con todas sus
+   * líneas, cantidades, precios y el cupón que el link deja aplicado. Cuando
+   * llega, manda sobre el producto del link y sobre el modo campaña.
+   */
+  carritoRestaurado?: { items: OrderItem[]; cupon: string | null };
 }
 
-export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty, catalogo }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty, catalogo, carritoRestaurado }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
 
   // Modo campaña: el producto deja de venir fijo de la URL y lo elige la
   // clienta. Sin `?elegir=1` este estado nunca cambia, así que el checkout de
   // siempre se comporta exactamente igual que antes.
-  const modoEleccion = searchParams.get("elegir") === "1" && (catalogo?.length ?? 0) > 0;
+  const modoEleccion =
+    !carritoRestaurado && searchParams.get("elegir") === "1" && (catalogo?.length ?? 0) > 0;
 
   // Cantidad por producto del selector. Arranca con el producto del link ya
   // dentro, para que quien llega no vea un carrito vacío.
@@ -130,10 +137,13 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       return copia;
     });
 
-  // Fuera del modo campaña manda el producto del link, como siempre.
-  const MAIN_ITEMS: OrderItem[] = shopifyProduct
-    ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
-    : [DEFAULT_ITEM];
+  // Fuera del modo campaña manda el carrito restaurado o, si no hay, el
+  // producto del link, como siempre.
+  const MAIN_ITEMS: OrderItem[] = carritoRestaurado
+    ? carritoRestaurado.items
+    : shopifyProduct
+      ? [shopifyProductToItem(shopifyProduct, initialVariantId)]
+      : [DEFAULT_ITEM];
   const mainVariantId = MAIN_ITEMS[0]?.shopifyVariantId;
 
   /** Lo que el selector aporta al carrito, en el orden del catálogo. */
@@ -165,16 +175,22 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       itemsSeleccion.forEach((i) => {
         if (i.shopifyVariantId) ids.add(i.shopifyVariantId);
       });
+    } else if (carritoRestaurado) {
+      carritoRestaurado.items.forEach((i) => {
+        if (i.shopifyVariantId) ids.add(i.shopifyVariantId);
+      });
     } else if (mainVariantId) {
       ids.add(mainVariantId);
     }
     return ids;
-  }, [modoEleccion, itemsSeleccion, mainVariantId]);
+  }, [modoEleccion, itemsSeleccion, mainVariantId, carritoRestaurado]);
 
   const carritoVacio = modoEleccion && itemsSeleccion.length === 0;
   const mpStatus = searchParams.get("status"); // "success" | "failure" | "pending" | null
 
-  const [mainQty, setMainQty] = useState(initialQty ?? 1);
+  const [mainQty, setMainQty] = useState(
+    carritoRestaurado?.items[0]?.quantity ?? initialQty ?? 1
+  );
   const [upsellQty, setUpsellQty] = useState<Record<string, number>>({});
 
   // Disparar InitiateCheckout al cargar la página. Los pixeles ahora cargan
@@ -202,8 +218,14 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
   const cuponUrl = searchParams.get("cupon")?.trim().toUpperCase() ?? "";
   const cuponUrlValido = COUPON_CODES[cuponUrl] !== undefined ? cuponUrl : "";
 
-  const [coupon, setCoupon] = useState(cuponUrlValido);
-  const [couponApplied, setCouponApplied] = useState(Boolean(cuponUrlValido));
+  // El carrito restaurado trae su propio cupón (el que la clienta tenía, o el
+  // de recuperación si el link es con descuento) y manda sobre la URL.
+  const cuponInicial =
+    carritoRestaurado?.cupon && COUPON_CODES[carritoRestaurado.cupon] !== undefined
+      ? carritoRestaurado.cupon
+      : cuponUrlValido;
+  const [coupon, setCoupon] = useState(cuponInicial);
+  const [couponApplied, setCouponApplied] = useState(Boolean(cuponInicial));
   const [couponError, setCouponError] = useState("");
 
   const handleApplyCoupon = () => {

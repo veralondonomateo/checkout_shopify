@@ -138,6 +138,7 @@ export function useSeguimientoCarrito({ watch, items, subtotal, total, coupon }:
           variant: i.variant ?? null,
           price: i.price,
           quantity: i.quantity,
+          shopifyVariantId: i.shopifyVariantId,
         })),
       };
 

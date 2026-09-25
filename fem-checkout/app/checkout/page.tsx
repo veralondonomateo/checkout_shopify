@@ -4,6 +4,8 @@ import CheckoutHeader from "@/components/checkout/CheckoutHeader";
 import { getProducts, getProductByHandle, getProductByHandleFresh, ShopifyProduct } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
 import { VARIANT_IDS, VARIANTES_CAMPANA } from "@/lib/catalog";
+import { createServerClient } from "@/lib/supabase";
+import { restaurarCarrito, CarritoRestaurado, MotivoNoDisponible } from "@/lib/restaurar-carrito";
 
 /** Reduce el producto a lo que el cliente realmente renderiza. */
 function toCheckoutProduct(p: ShopifyProduct | null): CheckoutProduct | null {
@@ -55,6 +57,67 @@ function ProductoNoDisponible() {
   );
 }
 
+const TEXTO_CARRITO_NO_DISPONIBLE: Record<MotivoNoDisponible | "error", { titulo: string; detalle: string }> = {
+  token_invalido: {
+    titulo: "Este enlace no es válido",
+    detalle: "No pudimos reconocer el carrito de este enlace. Puede que esté incompleto o mal copiado.",
+  },
+  no_encontrado: {
+    titulo: "Tu carrito ya no está disponible",
+    detalle: "No encontramos los productos que habías elegido.",
+  },
+  caducado: {
+    titulo: "Este enlace ya expiró",
+    detalle: "Los carritos se guardan por un tiempo limitado y este ya no está disponible.",
+  },
+  ya_comprado: {
+    titulo: "Este pedido ya se completó",
+    detalle: "El carrito de este enlace ya se convirtió en una compra, así que no lo volvemos a abrir para no duplicarla.",
+  },
+  producto_no_disponible: {
+    titulo: "Tu carrito ya no está disponible",
+    detalle: "Alguno de los productos que habías elegido ya no está a la venta.",
+  },
+  error: {
+    titulo: "No pudimos cargar tu carrito",
+    detalle: "Tuvimos un problema al recuperar los productos que habías elegido. Intenta abrir el enlace de nuevo en unos minutos.",
+  },
+};
+
+/**
+ * Pantalla para un link de recuperación (`?r=`) cuyo carrito no se puede
+ * reconstruir.
+ *
+ * Antes, en este caso el checkout abría el producto principal como si fuera
+ * el carrito de la clienta, y se le cobraba $110.000 por lo que ella había
+ * armado por $169.900. Aquí se dice la verdad y la decisión queda en ella.
+ */
+function CarritoNoDisponible({ motivo }: { motivo: MotivoNoDisponible | "error" }) {
+  const texto = TEXTO_CARRITO_NO_DISPONIBLE[motivo];
+  return (
+    <div className="min-h-screen bg-[#f5f5f5] flex flex-col">
+      <CheckoutHeader />
+      <main className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="bg-white rounded-lg border border-gray-200 p-8 max-w-md w-full text-center">
+          <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-5">
+            <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 005 19z" />
+            </svg>
+          </div>
+          <h1 className="text-lg font-bold text-gray-900 mb-2">{texto.titulo}</h1>
+          <p className="text-sm text-gray-500 mb-6">{texto.detalle}</p>
+          <a
+            href="/checkout"
+            className="inline-block w-full bg-gray-900 text-white text-sm font-medium rounded-md py-3 hover:bg-gray-800 transition-colors"
+          >
+            Hacer un pedido nuevo
+          </a>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export const metadata = {
   title: "FEM | Finalizar compra",
   description: "Checkout seguro - FEM Suplementos",
@@ -63,9 +126,9 @@ export const metadata = {
 export default async function CheckoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string; variant?: string; qty?: string; elegir?: string }>;
+  searchParams: Promise<{ product?: string; variant?: string; qty?: string; elegir?: string; r?: string }>;
 }) {
-  const { product, variant, qty, elegir } = await searchParams;
+  const { product, variant, qty, elegir, r } = await searchParams;
   const initialVariantId = variant ? parseInt(variant, 10) || undefined : undefined;
   const initialQty = qty ? Math.max(1, parseInt(qty, 10) || 1) : undefined;
 
@@ -73,10 +136,34 @@ export default async function CheckoutPage({
   // multiple round-trips and handles when exact handles differ from constants.
   const allProducts = await getProducts().catch(() => [] as ShopifyProduct[]);
 
+  // Link de recuperación: el carrito sale del token y de nada más. Ni
+  // `?variant=` ni `?product=` cuentan aquí, y si el carrito no se puede
+  // reconstruir se dice, en vez de caer al producto principal.
+  let restaurado: Extract<CarritoRestaurado, { disponible: true }> | null = null;
+  if (r) {
+    let resultado: CarritoRestaurado | null = null;
+    try {
+      resultado = await restaurarCarrito(createServerClient(), r, allProducts);
+    } catch (err) {
+      console.error("[Recuperación] Error reconstruyendo el carrito:", err);
+    }
+    if (!resultado) return <CarritoNoDisponible motivo="error" />;
+    if (!resultado.disponible) {
+      console.warn(`[Recuperación] Carrito no disponible (${resultado.motivo})`);
+      return <CarritoNoDisponible motivo={resultado.motivo} />;
+    }
+    restaurado = resultado;
+  }
+
   // El producto principal casi siempre está en el catálogo que ya trajimos;
   // solo caemos a una segunda llamada si el handle no aparece ahí.
   let shopifyProduct: ShopifyProduct | null = null;
-  if (product) {
+  if (restaurado) {
+    // Solo sirve para que el upsell no ofrezca lo que ya va en el carrito;
+    // las líneas del carrito vienen de `restaurado`.
+    const primera = restaurado.lineas[0].variant_id;
+    shopifyProduct = allProducts.find((p) => p.variants.some((v) => v.id === primera)) ?? null;
+  } else if (product) {
     shopifyProduct =
       allProducts.find((p) => p.handle === product) ??
       allProducts.find((p) => p.handle.includes(product.replace(/-/g, ""))) ??
@@ -105,7 +192,7 @@ export default async function CheckoutPage({
   let resolvedVariantId = initialVariantId;
   let handleInexistente: string | null = null;
 
-  if (!shopifyProduct) {
+  if (!shopifyProduct && !restaurado) {
     if (product && catalogoDisponible) {
       // Antes de declarar que no existe, preguntamos sin caché: puede ser un
       // producto recién creado que el catálogo cacheado todavía no ve.
@@ -113,7 +200,7 @@ export default async function CheckoutPage({
     }
   }
 
-  if (!shopifyProduct) {
+  if (!shopifyProduct && !restaurado) {
     if (product && catalogoDisponible) {
       handleInexistente = product;
       // Queda en los logs de Vercel, que es donde sí se puede consultar.
@@ -180,6 +267,22 @@ export default async function CheckoutPage({
         ovulosProduct={toCheckoutProduct(ovulosProduct ?? null)}
         initialVariantId={resolvedVariantId}
         initialQty={initialQty}
+        carritoRestaurado={
+          restaurado
+            ? {
+                cupon: restaurado.cupon,
+                items: restaurado.lineas.map((l) => ({
+                  id: l.id,
+                  name: l.nombre,
+                  variant: l.variante ?? undefined,
+                  price: l.precio,
+                  quantity: l.cantidad,
+                  image: l.imagen,
+                  shopifyVariantId: l.variant_id,
+                })),
+              }
+            : undefined
+        }
         catalogo={
           // Solo se manda con `?elegir=1`: fuera de las campañas con cupón el
           // cliente no necesita el catálogo y no hay por qué engordar el HTML

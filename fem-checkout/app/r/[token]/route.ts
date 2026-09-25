@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase";
 import { verificarToken, CUPON_RECUPERACION } from "@/lib/carritos";
 
 /**
  * `/r/<token>` — el link corto que va en el mensaje de WhatsApp.
  *
- * Redirige al checkout con el producto, la cantidad y (si el token lo dice) el
- * cupón ya puestos. Existe para que el mensaje lleve **una sola cadena**: el
- * botón de URL dinámica de Meta queda como `checkoutfem.com/r/{{1}}`, que
- * aprueba más fácil que una variable con varios parámetros dentro.
+ * Existe para que el mensaje lleve **una sola cadena**: el botón de URL
+ * dinámica de Meta está aprobado como `checkoutfem.com/r/{{1}}`, así que la
+ * forma de esta URL no se puede cambiar sin volver a pasar por aprobación.
  *
- * Si algo falla —token inválido, carrito borrado, base caída— manda al
- * checkout normal en vez de mostrar un error: la clienta abrió el link para
- * comprar, y perder la venta es peor que perder la precarga.
+ * Solo reenvía el token a `/checkout?r=<token>`. Quien reconstruye el carrito
+ * es el checkout, en el servidor y con `lib/restaurar-carrito` (la misma
+ * función que usa la API del CRM para decir qué abre el link). Antes esta
+ * ruta calculaba UNA variante y el checkout ni siquiera la respetaba: todos
+ * los carritos abrían el probiótico de $110.000.
+ *
+ * El token se reenvía aunque sea inválido: así el checkout le dice a la
+ * clienta que ese carrito no está disponible, en vez de abrir un checkout
+ * normal que parece el suyo y no lo es.
  */
 export async function GET(
   req: NextRequest,
@@ -20,52 +24,12 @@ export async function GET(
 ) {
   const { token } = await params;
   const destino = new URL("/checkout", req.nextUrl.origin);
-
-  const verificado = verificarToken(token);
-  if (!verificado) {
-    return NextResponse.redirect(destino, 302);
-  }
-
-  const { tipo, id, conDescuento } = verificado;
-
-  // El token va entero al checkout: es lo que dispara la precarga de los datos
-  // de la clienta (ver /api/checkout/recuperar).
   destino.searchParams.set("r", token);
-  if (conDescuento) destino.searchParams.set("cupon", CUPON_RECUPERACION);
 
-  try {
-    const supabase = createServerClient();
-
-    if (tipo === "pago_no_completado") {
-      // La variante y la cantidad viven en las líneas del pedido.
-      const { data } = await supabase
-        .from("order_items")
-        .select("shopify_variant_id, quantity")
-        .eq("order_id", id)
-        .not("shopify_variant_id", "is", null)
-        .limit(1)
-        .maybeSingle();
-
-      if (data?.shopify_variant_id) {
-        destino.searchParams.set("variant", String(data.shopify_variant_id));
-        if (data.quantity > 1) destino.searchParams.set("qty", String(data.quantity));
-      }
-    } else {
-      const { data } = await supabase
-        .from("checkout_sessions")
-        .select("variant_id, qty")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (data?.variant_id) {
-        destino.searchParams.set("variant", String(data.variant_id));
-        if (data.qty && data.qty > 1) destino.searchParams.set("qty", String(data.qty));
-      }
-    }
-  } catch (err) {
-    // Sin variante el checkout muestra el producto principal: se pierde la
-    // precisión del carrito, no la venta.
-    console.error("[Recuperación] No se pudo resolver el carrito:", err);
+  // El checkout aplica el cupón por su cuenta; este parámetro queda para que
+  // la URL siga diciendo lo mismo que antes a quien la mire o la mida.
+  if (verificarToken(token)?.conDescuento) {
+    destino.searchParams.set("cupon", CUPON_RECUPERACION);
   }
 
   return NextResponse.redirect(destino, 302);
