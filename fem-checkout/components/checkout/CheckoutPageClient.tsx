@@ -96,6 +96,8 @@ interface CheckoutPageClientProps {
   gomitasProduct?: CheckoutProduct | null;
   jabonProduct?: CheckoutProduct | null;
   ovulosProduct?: CheckoutProduct | null;
+  /** IDs de variante de upsells sin stock en Shopify; no se ofrecen. */
+  upsellsAgotados?: number[];
   initialVariantId?: number;
   initialQty?: number;
   /** Catálogo para el selector de campaña. Solo llega con `?elegir=1`. */
@@ -108,7 +110,7 @@ interface CheckoutPageClientProps {
   carritoRestaurado?: { items: OrderItem[]; cupon: string | null };
 }
 
-export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, initialVariantId, initialQty, catalogo, carritoRestaurado }: CheckoutPageClientProps) {
+export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jabonProduct, ovulosProduct, upsellsAgotados, initialVariantId, initialQty, catalogo, carritoRestaurado }: CheckoutPageClientProps) {
   const searchParams = useSearchParams();
 
   // Modo campaña: el producto deja de venir fijo de la URL y lo elige la
@@ -287,9 +289,11 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
       if (p.shopifyVariantId && variantesEnCarrito.has(p.shopifyVariantId)) return false;
       if (p.shopifyHandle === shopifyProduct?.handle) return false;
       if (p.id === "gomitas-pms" && (!p.price || !p.image)) return false;
+      // Ofrecer algo agotado acaba en un pedido que no se puede despachar.
+      if (p.shopifyVariantId && upsellsAgotados?.includes(p.shopifyVariantId)) return false;
       return true;
     });
-  }, [gomitasProduct, jabonProduct, ovulosProduct, shopifyProduct, variantesEnCarrito]);
+  }, [gomitasProduct, jabonProduct, ovulosProduct, upsellsAgotados, shopifyProduct, variantesEnCarrito]);
 
   // ── Items & totals ────────────────────────────────────────────────────────
   const handleToggle = (id: string) =>

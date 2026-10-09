@@ -144,6 +144,23 @@ export interface ShopifyVariant {
   price: string;
   sku: string;
   inventory_quantity: number;
+  /** "shopify" cuando Shopify lleva el inventario; null si no se controla. */
+  inventory_management?: string | null;
+  /** "deny" no deja vender sin stock; "continue" sí. */
+  inventory_policy?: string;
+}
+
+/**
+ * Una variante está agotada solo si Shopify lleva su inventario, no permite
+ * vender sin stock y no le queda nada. Si el inventario no se controla, o se
+ * permite sobrevender, Shopify aceptaría el pedido igual y no la escondemos.
+ */
+export function varianteAgotada(v: ShopifyVariant): boolean {
+  return (
+    v.inventory_management === "shopify" &&
+    v.inventory_policy === "deny" &&
+    v.inventory_quantity <= 0
+  );
 }
 
 export interface ShopifyProduct {

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import CheckoutPageClient from "@/components/checkout/CheckoutPageClient";
 import CheckoutHeader from "@/components/checkout/CheckoutHeader";
-import { getProducts, getProductByHandle, getProductByHandleFresh, ShopifyProduct } from "@/lib/shopify";
+import { getProducts, getProductByHandle, getProductByHandleFresh, ShopifyProduct, varianteAgotada } from "@/lib/shopify";
 import { CheckoutProduct } from "@/types/checkout";
 import { VARIANT_IDS, VARIANTES_CAMPANA } from "@/lib/catalog";
 import { createServerClient } from "@/lib/supabase";
@@ -258,6 +258,15 @@ export default async function CheckoutPage({
         !/combo/i.test(p.title)
     );
 
+  // Upsells agotados en Shopify: se esconden del checkout y vuelven solos
+  // cuando entra inventario, sin tocar código. El cliente ofrece la primera
+  // variante de cada producto, así que es esa la que se mira. Si el catálogo
+  // no respondió no sabemos nada del stock y no se esconde ninguno.
+  const upsellsAgotados = [gomitasProduct, jabonProduct, ovulosProduct]
+    .map((p) => p?.variants[0])
+    .filter((v) => v !== undefined && varianteAgotada(v))
+    .map((v) => v!.id);
+
   return (
     <Suspense>
       <CheckoutPageClient
@@ -265,6 +274,7 @@ export default async function CheckoutPage({
         gomitasProduct={toCheckoutProduct(gomitasProduct ?? null)}
         jabonProduct={toCheckoutProduct(jabonProduct ?? null)}
         ovulosProduct={toCheckoutProduct(ovulosProduct ?? null)}
+        upsellsAgotados={upsellsAgotados}
         initialVariantId={resolvedVariantId}
         initialQty={initialQty}
         carritoRestaurado={
