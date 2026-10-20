@@ -335,6 +335,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
           {couponApplied && cuponUrlValido && (
             <TemporizadorCupon
               codigo={cuponUrlValido}
+              porcentaje={Math.round((COUPON_CODES[cuponUrlValido] ?? 0) * 100)}
               onExpirar={() => {
                 // Se quita el descuento de verdad. Ver la nota del componente:
                 // el servidor no impone la caducidad, así que quien reescriba
@@ -349,6 +350,8 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
             cantidades={cantidades}
             onAgregar={agregarProducto}
             onQuitar={quitarProducto}
+            descuento={discountRate}
+            paraClientas={searchParams.get("clientas") === "1"}
           />
         </>
       )}

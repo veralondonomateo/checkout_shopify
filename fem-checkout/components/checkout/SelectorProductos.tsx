@@ -39,26 +39,60 @@ export default function SelectorProductos({
   cantidades,
   onAgregar,
   onQuitar,
+  descuento,
+  paraClientas,
 }: {
   catalogo: CheckoutProduct[];
   /** Cantidad en el carrito por id de producto. */
   cantidades: Record<string, number>;
   onAgregar: (p: CheckoutProduct) => void;
   onQuitar: (p: CheckoutProduct) => void;
+  /** Descuento vigente (0.1 = 10 %). En 0 cuando no hay cupón o ya venció. */
+  descuento: number;
+  /** `?clientas=1`: el link va a quien ya compró, y el saludo lo reconoce. */
+  paraClientas: boolean;
 }) {
   if (catalogo.length === 0) return null;
 
   const enCarrito = Object.values(cantidades).reduce((s, n) => s + n, 0);
+  const porcentaje = Math.round(descuento * 100);
 
   return (
     <section className="bg-white border-b border-gray-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+        {/*
+          Quien llega por el link de una campaña tiene que entender en un
+          vistazo qué recibe: antes la página solo decía "Arma tu pedido" y
+          el porcentaje no aparecía en ningún lado.
+        */}
+        {porcentaje > 0 ? (
+          <div className="rounded-lg bg-[#fc5245]/5 border border-[#fc5245]/20 px-4 py-3 mb-4">
+            {paraClientas && (
+              <p className="text-[11px] font-medium text-[#fc5245] mb-0.5">
+                Para ti, que ya eres parte de FEM
+              </p>
+            )}
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 leading-snug">
+              {paraClientas
+                ? `Tienes ${porcentaje}% de descuento en todo tu pedido`
+                : `${porcentaje}% de descuento en todo tu pedido`}
+            </h2>
+            <p className="text-xs text-gray-600 mt-1">
+              {paraClientas
+                ? "Gracias por confiar en nosotros. El descuento ya está aplicado: elige tus productos favoritos y verás el ahorro en el total."
+                : "El descuento ya está aplicado: elige tus productos y verás el ahorro en el total."}
+            </p>
+          </div>
+        ) : null}
+
         <div className="flex items-baseline justify-between gap-3 mb-3">
           <h2 className="text-sm font-semibold text-gray-900">Arma tu pedido</h2>
           <span className="text-[11px] text-gray-400">
             {enCarrito === 0
               ? "Agrega lo que quieras llevar"
-              : "Tu descuento aplica a todo"}
+              : porcentaje > 0
+                ? `Tu ${porcentaje}% aplica a todo`
+                : "Agrega lo que quieras llevar"}
           </span>
         </div>
 
@@ -102,9 +136,21 @@ export default function SelectorProductos({
                   <p className="text-[11px] leading-tight text-gray-900 line-clamp-2 min-h-[2.1em]">
                     {p.title}
                   </p>
-                  <p className="text-xs font-bold text-gray-900 mt-1 mb-2">
-                    {formatCOP(precioDe(p))}
-                  </p>
+                  {porcentaje > 0 ? (
+                    <div className="mt-1 mb-2">
+                      <p className="text-[11px] text-gray-400 line-through leading-none">
+                        {formatCOP(precioDe(p))}
+                      </p>
+                      <p className="text-xs font-bold text-[#fc5245] mt-0.5">
+                        {formatCOP(Math.round(precioDe(p) * (1 - descuento)))}
+                        <span className="ml-1 text-[10px] font-semibold">-{porcentaje}%</span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs font-bold text-gray-900 mt-1 mb-2">
+                      {formatCOP(precioDe(p))}
+                    </p>
+                  )}
 
                   {/* El botón queda abajo del todo para que todas las tarjetas
                       lo tengan a la misma altura aunque el nombre ocupe una
