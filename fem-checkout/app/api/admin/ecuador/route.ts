@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("pedidos_ecuador")
     .select(
-      "id, created_at, nombre, apellido, email, telefono, provincia, ciudad, direccion, presentacion, unidades, total, moneda, estado_pago, despachado_at"
+      "id, created_at, nombre, apellido, cedula, email, telefono, provincia, ciudad, direccion, complemento, presentacion, unidades, total, moneda, metodo_pago, estado_pago, despachado_at"
     )
     .order("created_at", { ascending: false })
     .limit(200);

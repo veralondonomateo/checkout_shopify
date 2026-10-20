@@ -28,6 +28,7 @@ import {
   PRODUCTO_EC,
   type PresentacionEC,
 } from "@/lib/productos-ecuador";
+import { cedulaValidaEC, normalizarCelularEC } from "@/lib/datos-ecuador";
 
 const CLAVE_IDEMPOTENCIA = "fem-ec-idem";
 
@@ -107,10 +108,12 @@ export default function CheckoutEcuador({
       e.email = "Ese correo no parece válido";
     if (!campos.nombre.trim()) e.nombre = "Escribe tu nombre";
     if (!campos.apellido.trim()) e.apellido = "Escribe tu apellido";
-    const d = campos.telefono.replace(/\D/g, "");
-    if (!d) e.telefono = "Escribe tu número";
-    else if (d.length < 9 || d.length > 13) e.telefono = "Revisa el número";
+    if (!campos.cedula.trim()) e.cedula = "Escribe tu cédula";
+    else if (!cedulaValidaEC(campos.cedula)) e.cedula = "La cédula tiene 10 dígitos";
+    if (!campos.telefono.trim()) e.telefono = "Escribe tu número";
+    else if (!normalizarCelularEC(campos.telefono)) e.telefono = "Escribe un celular de Ecuador (09...)";
     if (!campos.direccion.trim()) e.direccion = "Escribe tu dirección";
+    if (!campos.complemento.trim()) e.complemento = "Cuéntanos cómo llegar";
     if (!campos.provincia) e.provincia = "Elige tu provincia";
     if (!campos.ciudad) e.ciudad = "Elige tu ciudad";
     setErrores(e);
@@ -227,23 +230,25 @@ export default function CheckoutEcuador({
                 <Input label="Apellido" placeholder="García" value={campos.apellido}
                   onChange={(e) => set("apellido")(e.target.value)}
                   error={errores.apellido} data-error={errores.apellido ? "1" : undefined} />
-                <Input label="Cédula" optional placeholder="Para la factura"
+                <Input label="Cédula" placeholder="10 dígitos"
                   inputMode="numeric" value={campos.cedula}
-                  onChange={(e) => set("cedula")(e.target.value)} />
+                  onChange={(e) => set("cedula")(e.target.value)}
+                  error={errores.cedula} data-error={errores.cedula ? "1" : undefined} />
                 <Input label="Número de WhatsApp" type="tel" inputMode="tel"
                   placeholder="0991234567" value={campos.telefono}
                   onChange={(e) => set("telefono")(e.target.value)}
                   error={errores.telefono} data-error={errores.telefono ? "1" : undefined} />
               </div>
 
-              <Input label="Dirección" placeholder="Av. Amazonas N34-56 y Av. Naciones Unidas"
+              <Input label="Calle principal, número y calle secundaria" placeholder="Av. Amazonas N34-56 y Av. Naciones Unidas"
                 value={campos.direccion}
                 onChange={(e) => set("direccion")(e.target.value)}
                 error={errores.direccion} data-error={errores.direccion ? "1" : undefined} />
 
-              <Input label="Complemento" optional placeholder="Depto., piso, oficina..."
+              <Input label="Referencia" placeholder="Barrio, color de la casa, frente a..."
                 value={campos.complemento}
-                onChange={(e) => set("complemento")(e.target.value)} />
+                onChange={(e) => set("complemento")(e.target.value)}
+                error={errores.complemento} data-error={errores.complemento ? "1" : undefined} />
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <Select

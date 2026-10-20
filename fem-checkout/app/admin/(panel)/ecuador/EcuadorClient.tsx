@@ -12,20 +12,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAdminPassword } from "../AdminShell";
 import { PRESENTACIONES_EC, PRODUCTO_EC, formatUSD } from "@/lib/productos-ecuador";
+import { avisosPedidoEC } from "@/lib/datos-ecuador";
 
 interface PedidoEC {
   id: string;
   created_at: string;
   nombre: string;
   apellido: string;
+  cedula: string | null;
   email: string;
   telefono: string;
   provincia: string;
   ciudad: string;
   direccion: string;
+  complemento: string | null;
   presentacion: string;
   unidades: number;
   total: number | string;
+  metodo_pago: string;
   estado_pago: string;
   despachado_at: string | null;
 }
@@ -38,6 +42,58 @@ function fechaCorta(iso: string) {
     day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
     timeZone: "America/Guayaquil",
   }).format(new Date(iso));
+}
+
+/** Bloque de texto con todo lo que pide la transportadora, listo para pegar. */
+function datosEnvio(p: PedidoEC): string {
+  return [
+    `Nombre: ${p.nombre} ${p.apellido}`,
+    `Cédula: ${p.cedula ?? "—"}`,
+    `Celular: ${p.telefono}`,
+    `Correo: ${p.email}`,
+    `Provincia: ${p.provincia}`,
+    `Ciudad: ${p.ciudad}`,
+    `Dirección: ${p.direccion}`,
+    `Referencia: ${p.complemento ?? "—"}`,
+    `Producto: ${PRODUCTO_EC.nombre} x ${p.unidades}`,
+    `Cobrar contra entrega: ${formatUSD(Number(p.total))}`,
+  ].join("\n");
+}
+
+const COLUMNAS_CSV: [string, (p: PedidoEC) => string][] = [
+  ["Fecha", (p) => fechaCorta(p.created_at)],
+  ["Pedido", (p) => p.id.slice(0, 8).toUpperCase()],
+  ["Nombre", (p) => p.nombre],
+  ["Apellido", (p) => p.apellido],
+  ["Cédula", (p) => p.cedula ?? ""],
+  ["Celular", (p) => p.telefono],
+  ["Correo", (p) => p.email],
+  ["Provincia", (p) => p.provincia],
+  ["Ciudad", (p) => p.ciudad],
+  ["Dirección", (p) => p.direccion],
+  ["Referencia", (p) => p.complemento ?? ""],
+  ["Unidades", (p) => String(p.unidades)],
+  ["Total a cobrar (USD)", (p) => Number(p.total).toFixed(2)],
+  ["Pago", (p) => p.metodo_pago],
+  ["Avisos", (p) => avisosPedidoEC(p).join(" / ")],
+];
+
+/**
+ * CSV con punto y coma y BOM: así Excel en español lo abre en columnas y con
+ * las tildes bien, sin pasar por el asistente de importación.
+ */
+function descargarCSV(pedidos: PedidoEC[]) {
+  const celda = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const filas = [
+    COLUMNAS_CSV.map(([t]) => celda(t)).join(";"),
+    ...pedidos.map((p) => COLUMNAS_CSV.map(([, f]) => celda(f(p))).join(";")),
+  ];
+  const blob = new Blob(["\uFEFF" + filas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `pedidos-ecuador-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export default function EcuadorClient() {
@@ -132,12 +188,21 @@ export default function EcuadorClient() {
       <section className="bg-white rounded-xl border border-gray-200 p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-900">Pedidos</h2>
-          <button
-            onClick={cargar}
-            className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
-          >
-            Actualizar
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => descargarCSV(pedidos)}
+              disabled={pedidos.length === 0}
+              className="text-xs font-medium text-gray-900 hover:underline disabled:text-gray-300"
+            >
+              Descargar Excel
+            </button>
+            <button
+              onClick={cargar}
+              className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
+            >
+              Actualizar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
@@ -155,37 +220,51 @@ export default function EcuadorClient() {
             Todavía no hay pedidos de Ecuador.
           </p>
         ) : (
-          <div className="overflow-x-auto -mx-5 px-5">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
-                  <th className="pb-2 font-medium">Fecha</th>
-                  <th className="pb-2 font-medium">Clienta</th>
-                  <th className="pb-2 font-medium">Destino</th>
-                  <th className="pb-2 font-medium">Presentación</th>
-                  <th className="pb-2 font-medium text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pedidos.map((p) => (
-                  <tr key={p.id} className="border-b border-gray-50 last:border-0">
-                    <td className="py-2.5 text-gray-500 whitespace-nowrap">{fechaCorta(p.created_at)}</td>
-                    <td className="py-2.5">
-                      <span className="block text-gray-900">{p.nombre} {p.apellido}</span>
-                      <span className="block text-[11px] text-gray-400">{p.telefono}</span>
-                    </td>
-                    <td className="py-2.5 text-gray-600">
-                      <span className="block">{p.ciudad}</span>
-                      <span className="block text-[11px] text-gray-400">{p.provincia}</span>
-                    </td>
-                    <td className="py-2.5 text-gray-600">{p.unidades} und</td>
-                    <td className="py-2.5 text-right font-medium text-gray-900">
-                      {formatUSD(Number(p.total))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {pedidos.map((p) => {
+              const avisos = avisosPedidoEC(p);
+              return (
+                <article key={p.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {p.nombre} {p.apellido}
+                      </p>
+                      <p className="text-[11px] text-gray-400">
+                        {fechaCorta(p.created_at)} · Pedido {p.id.slice(0, 8).toUpperCase()}
+                        {p.despachado_at ? " · Despachado" : " · Sin despachar"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-gray-900">
+                        {p.unidades} und · {formatUSD(Number(p.total))}
+                      </span>
+                      <button
+                        onClick={() => copiar(datosEnvio(p), p.id)}
+                        className="text-xs font-medium px-3 py-1.5 rounded-md bg-gray-900 text-white hover:bg-gray-700 transition-colors"
+                      >
+                        {copiado === p.id ? "¡Copiado!" : "Copiar datos"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                    <Campo etiqueta="Cédula" valor={p.cedula} />
+                    <Campo etiqueta="Celular" valor={p.telefono} />
+                    <Campo etiqueta="Correo" valor={p.email} />
+                    <Campo etiqueta="Provincia / ciudad" valor={`${p.provincia} · ${p.ciudad}`} />
+                    <Campo etiqueta="Dirección" valor={p.direccion} ancho />
+                    <Campo etiqueta="Referencia" valor={p.complemento} ancho />
+                  </dl>
+
+                  {avisos.length > 0 && (
+                    <ul className="mt-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 space-y-0.5">
+                      {avisos.map((a) => <li key={a}>⚠ {a}</li>)}
+                    </ul>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -198,6 +277,15 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
     <div className="rounded-lg border border-gray-200 px-3.5 py-3">
       <p className="text-[11px] text-gray-400">{etiqueta}</p>
       <p className="text-lg font-bold text-gray-900 mt-0.5">{valor}</p>
+    </div>
+  );
+}
+
+function Campo({ etiqueta, valor, ancho }: { etiqueta: string; valor: string | null; ancho?: boolean }) {
+  return (
+    <div className={ancho ? "sm:col-span-2" : undefined}>
+      <dt className="text-[11px] text-gray-400">{etiqueta}</dt>
+      <dd className={valor ? "text-gray-900 break-words" : "text-gray-300"}>{valor || "—"}</dd>
     </div>
   );
 }

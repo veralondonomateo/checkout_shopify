@@ -8,6 +8,7 @@ import {
   PRESENTACIONES_EC,
 } from "@/lib/productos-ecuador";
 import { PROVINCIAS_EC } from "@/data/provincias-ecuador";
+import { cedulaValidaEC, normalizarCelularEC } from "@/lib/datos-ecuador";
 
 /**
  * Alta de pedidos de Ecuador.
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   // ── Validación ───────────────────────────────────────────────────────────
   const faltantes = (
-    ["email", "nombre", "apellido", "telefono", "direccion", "provincia", "ciudad"] as const
+    ["email", "nombre", "apellido", "cedula", "telefono", "direccion", "complemento", "provincia", "ciudad"] as const
   ).filter((c) => !noVacio(body[c]));
 
   if (faltantes.length > 0) {
@@ -89,11 +90,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Teléfono de Ecuador: 9 dígitos (móvil sin el 0) o 10 con el 0 delante.
-  const digitos = body.telefono.replace(/\D/g, "");
-  if (digitos.length < 9 || digitos.length > 13) {
+  // Celular de Ecuador: la entrega se coordina por WhatsApp, y un número de
+  // otro país deja el pedido sin forma de confirmarse.
+  const celular = normalizarCelularEC(body.telefono);
+  if (!celular) {
     return NextResponse.json(
-      { error: "Ese número de teléfono no parece válido.", codigo: "telefono_invalido" },
+      { error: "Escribe un celular de Ecuador, por ejemplo 0991234567.", codigo: "telefono_invalido" },
+      { status: 400 }
+    );
+  }
+
+  // La transportadora pide la cédula para entregar contra entrega.
+  if (!cedulaValidaEC(body.cedula ?? "")) {
+    return NextResponse.json(
+      { error: "La cédula debe tener 10 dígitos.", codigo: "cedula_invalida" },
       { status: 400 }
     );
   }
@@ -152,10 +162,10 @@ export async function POST(req: NextRequest) {
         email: body.email.trim().toLowerCase(),
         nombre: body.nombre.trim(),
         apellido: body.apellido.trim(),
-        cedula: body.cedula?.trim() || null,
-        telefono: body.telefono.trim(),
+        cedula: body.cedula!.replace(/\D/g, ""),
+        telefono: celular,
         direccion: body.direccion.trim(),
-        complemento: body.complemento?.trim() || null,
+        complemento: body.complemento!.trim(),
         provincia: body.provincia.trim(),
         ciudad: body.ciudad.trim(),
         presentacion: presentacion.slug,
