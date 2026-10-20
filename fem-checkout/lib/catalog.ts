@@ -41,6 +41,7 @@ export const PRINCIPAL_FALLBACK_PRICE = 110000;
  */
 export const VARIANTES_CAMPANA: readonly number[] = [
   43659069325400, // Alimento con probióticos y prebióticos x 60 UND
+  43656647606360, // Combo alimento con probióticos + Jabón íntimo (Dúo perfecto, compra única x1)
   44041401598040, // Combo Probiótico + Six pack de Soda Prebiótica
   43661534298200, // Fem Mom x 60 tabletas
   43087005352024, // Soda Prebiótica x 6 UND
