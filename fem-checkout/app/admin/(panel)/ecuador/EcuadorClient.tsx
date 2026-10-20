@@ -32,6 +32,8 @@ interface PedidoEC {
   metodo_pago: string;
   estado_pago: string;
   despachado_at: string | null;
+  operador_pedido_id: string | null;
+  operador_error: string | null;
 }
 
 const APP_URL =
@@ -124,6 +126,21 @@ export default function EcuadorClient() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  const [subiendo, setSubiendo] = useState<string | null>(null);
+  const subir = async (id: string) => {
+    setSubiendo(id);
+    try {
+      await fetch("/api/admin/ecuador", {
+        method: "POST",
+        headers: { "x-admin-password": password, "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+    } finally {
+      setSubiendo(null);
+      cargar();
+    }
+  };
+
   const copiar = async (texto: string, clave: string) => {
     try {
       await navigator.clipboard.writeText(texto);
@@ -138,7 +155,7 @@ export default function EcuadorClient() {
         <h1 className="text-xl font-bold text-gray-900">Ecuador</h1>
         <p className="text-sm text-gray-500 mt-1">
           Operación independiente: precios en dólares y pedidos en su propia
-          tabla. Todavía no está conectada a Shopify ni a ninguna transportadora.
+          tabla. Los pedidos nuevos se suben solos a Mastershop.
         </p>
       </header>
 
@@ -232,7 +249,7 @@ export default function EcuadorClient() {
                       </p>
                       <p className="text-[11px] text-gray-400">
                         {fechaCorta(p.created_at)} · Pedido {p.id.slice(0, 8).toUpperCase()}
-                        {p.despachado_at ? " · Despachado" : " · Sin despachar"}
+                        {p.despachado_at ? " · Despachado" : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -256,6 +273,30 @@ export default function EcuadorClient() {
                     <Campo etiqueta="Dirección" valor={p.direccion} ancho />
                     <Campo etiqueta="Referencia" valor={p.complemento} ancho />
                   </dl>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                    {p.operador_pedido_id ? (
+                      <span className="text-green-700 bg-green-50 border border-green-200 rounded-md px-2.5 py-1">
+                        En Mastershop{p.operador_pedido_id !== "subido" ? ` · #${p.operador_pedido_id}` : ""}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-gray-500">
+                          {p.operador_error ? "No subió a Mastershop" : "Sin subir a Mastershop"}
+                        </span>
+                        <button
+                          onClick={() => subir(p.id)}
+                          disabled={subiendo === p.id}
+                          className="font-medium px-3 py-1.5 rounded-md border border-gray-300 text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          {subiendo === p.id ? "Subiendo…" : "Subir a Mastershop"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {!p.operador_pedido_id && p.operador_error && (
+                    <p className="mt-2 text-[11px] text-red-600 break-words">{p.operador_error}</p>
+                  )}
 
                   {avisos.length > 0 && (
                     <ul className="mt-3 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 space-y-0.5">

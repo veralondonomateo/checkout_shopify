@@ -123,8 +123,7 @@ export default function CheckoutEcuador({
       e.email = "Ese correo no parece válido";
     if (!campos.nombre.trim()) e.nombre = "Escribe tu nombre";
     if (!campos.apellido.trim()) e.apellido = "Escribe tu apellido";
-    if (!campos.cedula.trim()) e.cedula = "Escribe tu cédula";
-    else if (!cedulaValidaEC(campos.cedula)) e.cedula = "La cédula tiene 10 dígitos";
+    if (campos.cedula.trim() && !cedulaValidaEC(campos.cedula)) e.cedula = "La cédula tiene 10 dígitos";
     if (!campos.telefono.trim()) e.telefono = "Escribe tu número";
     else if (!normalizarCelularEC(campos.telefono)) e.telefono = "Escribe un celular de Ecuador (09...)";
     if (!campos.direccion.trim()) e.direccion = "Escribe tu dirección";
@@ -254,7 +253,7 @@ export default function CheckoutEcuador({
                 <Input label="Apellido" placeholder="García" value={campos.apellido}
                   onChange={(e) => set("apellido")(e.target.value)}
                   error={errores.apellido} data-error={errores.apellido ? "1" : undefined} />
-                <Input label="Cédula" placeholder="10 dígitos"
+                <Input label="Cédula" optional placeholder="10 dígitos"
                   inputMode="numeric" value={campos.cedula}
                   onChange={(e) => set("cedula")(e.target.value)}
                   error={errores.cedula} data-error={errores.cedula ? "1" : undefined} />

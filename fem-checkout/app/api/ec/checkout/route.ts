@@ -10,6 +10,7 @@ import {
 import { PROVINCIAS_EC } from "@/data/provincias-ecuador";
 import { cedulaValidaEC, normalizarCelularEC } from "@/lib/datos-ecuador";
 import { sendPurchaseEvent } from "@/lib/meta";
+import { subirYRegistrar } from "@/lib/mastershop-ec";
 
 /**
  * Alta de pedidos de Ecuador.
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
 
   // ── Validación ───────────────────────────────────────────────────────────
   const faltantes = (
-    ["email", "nombre", "apellido", "cedula", "telefono", "direccion", "complemento", "provincia", "ciudad"] as const
+    ["email", "nombre", "apellido", "telefono", "direccion", "complemento", "provincia", "ciudad"] as const
   ).filter((c) => !noVacio(body[c]));
 
   if (faltantes.length > 0) {
@@ -103,8 +104,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // La transportadora pide la cédula para entregar contra entrega.
-  if (!cedulaValidaEC(body.cedula ?? "")) {
+  // La cédula es opcional mientras no facturemos en Ecuador; si la escriben,
+  // que por lo menos tenga la forma de una.
+  if (noVacio(body.cedula) && !cedulaValidaEC(body.cedula)) {
     return NextResponse.json(
       { error: "La cédula debe tener 10 dígitos.", codigo: "cedula_invalida" },
       { status: 400 }
@@ -172,7 +174,7 @@ export async function POST(req: NextRequest) {
         email: body.email.trim().toLowerCase(),
         nombre: body.nombre.trim(),
         apellido: body.apellido.trim(),
-        cedula: body.cedula!.replace(/\D/g, ""),
+        cedula: body.cedula?.replace(/\D/g, "") || null,
         telefono: celular,
         direccion: body.direccion.trim(),
         complemento: body.complemento!.trim(),
@@ -240,6 +242,12 @@ export async function POST(req: NextRequest) {
       fbc: fbc ?? undefined,
       contents: [{ id: `ec-${presentacion.slug}`, quantity: presentacion.unidades, price: presentacion.precio / presentacion.unidades }],
     }).catch(() => {});
+
+    // Subida al operador. Un fallo no tumba la venta: el pedido ya está
+    // guardado, queda el error anotado y se reintenta desde el panel.
+    await subirYRegistrar(supabase, pedidoId!).catch((err) =>
+      console.error("[Mastershop EC] Error inesperado:", err)
+    );
   }
 
   console.log(`[Checkout EC] Pedido ${pedidoId} — ${presentacion.slug} — ${total} ${MONEDA_EC}`);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { subirYRegistrar } from "@/lib/mastershop-ec";
 
 /**
  * Pedidos de Ecuador para el panel.
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("pedidos_ecuador")
     .select(
-      "id, created_at, nombre, apellido, cedula, email, telefono, provincia, ciudad, direccion, complemento, presentacion, unidades, total, moneda, metodo_pago, estado_pago, despachado_at"
+      "id, created_at, nombre, apellido, cedula, email, telefono, provincia, ciudad, direccion, complemento, presentacion, unidades, total, moneda, metodo_pago, estado_pago, despachado_at, operador_pedido_id, operador_error"
     )
     .order("created_at", { ascending: false })
     .limit(200);
@@ -41,4 +42,21 @@ export async function GET(req: NextRequest) {
       ticket: pedidos.length ? total / pedidos.length : 0,
     },
   });
+}
+
+/**
+ * Sube a Mastershop un pedido que no subió solo: los que entraron antes de la
+ * integración o los que fallaron. No duplica uno que ya está subido.
+ */
+export async function POST(req: NextRequest) {
+  const pw = req.headers.get("x-admin-password");
+  if (!pw || pw !== process.env.ADMIN_PASSWORD) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+  const { id } = await req.json().catch(() => ({ id: null }));
+  if (typeof id !== "string" || !id) {
+    return NextResponse.json({ error: "Falta el pedido" }, { status: 400 });
+  }
+  const r = await subirYRegistrar(createServerClient(), id);
+  return NextResponse.json(r, { status: r.ok ? 200 : 502 });
 }

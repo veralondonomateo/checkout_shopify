@@ -52,7 +52,7 @@ export function avisosPedidoEC(p: {
   } else if (!normalizarCelularEC(p.telefono)) {
     avisos.push("El celular no es de Ecuador");
   }
-  if (!p.cedula || !cedulaValidaEC(p.cedula)) avisos.push("Falta la cédula o no tiene 10 dígitos");
+  if (p.cedula && !cedulaValidaEC(p.cedula)) avisos.push("La cédula no tiene 10 dígitos");
   if (!p.complemento?.trim()) avisos.push("Sin referencia de entrega");
   return avisos;
 }
