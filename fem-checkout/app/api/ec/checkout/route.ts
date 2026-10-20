@@ -9,6 +9,7 @@ import {
 } from "@/lib/productos-ecuador";
 import { PROVINCIAS_EC } from "@/data/provincias-ecuador";
 import { cedulaValidaEC, normalizarCelularEC } from "@/lib/datos-ecuador";
+import { sendPurchaseEvent } from "@/lib/meta";
 
 /**
  * Alta de pedidos de Ecuador.
@@ -39,6 +40,8 @@ interface CuerpoEC {
   presentacion: string;
   idempotencyKey?: string;
   eventSourceUrl?: string;
+  fbp?: string;
+  fbc?: string;
 }
 
 /**
@@ -132,6 +135,13 @@ export async function POST(req: NextRequest) {
   const idempotencyKey = body.idempotencyKey?.trim() || null;
   const huella = huellaContenido(body, total);
   let pedidoId: string | null = null;
+  // Solo un pedido nuevo es una compra nueva: un reintento no se le vuelve a
+  // contar a Meta.
+  let esNuevo = false;
+  const fbp = body.fbp ?? req.cookies.get("_fbp")?.value ?? null;
+  const fbc = body.fbc ?? req.cookies.get("_fbc")?.value ?? null;
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const clientUserAgent = req.headers.get("user-agent") ?? null;
 
   if (idempotencyKey) {
     const { data } = await supabase
@@ -179,8 +189,10 @@ export async function POST(req: NextRequest) {
         estado_pago: "pendiente",
         idempotency_key: idempotencyKey,
         content_hash: huella,
-        client_ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
-        client_user_agent: req.headers.get("user-agent") ?? null,
+        fbp,
+        fbc,
+        client_ip: clientIp,
+        client_user_agent: clientUserAgent,
         event_source_url: body.eventSourceUrl ?? null,
       })
       .select("id")
@@ -202,7 +214,32 @@ export async function POST(req: NextRequest) {
       }
     } else {
       pedidoId = data.id;
+      esNuevo = true;
     }
+  }
+
+  // Contra entrega cuenta como compra al registrarse, igual que en Colombia.
+  // Se espera la respuesta: en Vercel, lo que queda corriendo después de
+  // responder se puede cortar, y es un solo llamado corto.
+  if (esNuevo) {
+    await sendPurchaseEvent({
+      pais: "ec",
+      orderId: pedidoId!,
+      email: body.email,
+      phone: celular,
+      value: total,
+      currency: MONEDA_EC,
+      firstName: body.nombre,
+      lastName: body.apellido,
+      city: body.ciudad,
+      state: body.provincia,
+      eventSourceUrl: body.eventSourceUrl,
+      clientIp: clientIp ?? undefined,
+      clientUserAgent: clientUserAgent ?? undefined,
+      fbp: fbp ?? undefined,
+      fbc: fbc ?? undefined,
+      contents: [{ id: `ec-${presentacion.slug}`, quantity: presentacion.unidades, price: presentacion.precio / presentacion.unidades }],
+    }).catch(() => {});
   }
 
   console.log(`[Checkout EC] Pedido ${pedidoId} — ${presentacion.slug} — ${total} ${MONEDA_EC}`);

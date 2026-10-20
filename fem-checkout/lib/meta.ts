@@ -1,21 +1,45 @@
 import { createHash } from "crypto";
 
-const PIXEL_ID = process.env.META_PIXEL_ID!;
-const ACCESS_TOKEN = process.env.META_CONVERSIONS_TOKEN!;
 const API_VERSION = "v22.0";
+
+/**
+ * Cada país tiene su propio pixel. Ecuador va aparte para que sus compras en
+ * dólares no se mezclen con el aprendizaje, los públicos ni el ROAS del pixel
+ * de Colombia, que lleva meses entrenado con compras en pesos.
+ */
+const PAISES = {
+  co: {
+    pixelId: process.env.META_PIXEL_ID,
+    token: process.env.META_CONVERSIONS_TOKEN,
+    prefijo: "57",
+    url: "https://checkoutfem.com/checkout",
+  },
+  ec: {
+    pixelId: process.env.META_EC_PIXEL_ID ?? "2200302204697951",
+    token: process.env.META_EC_CONVERSIONS_TOKEN,
+    prefijo: "593",
+    url: "https://checkoutfem.com/ec/checkout",
+  },
+} as const;
+
+type Pais = keyof typeof PAISES;
 
 function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 }
 
-function hashPhone(phone: string): string {
-  // Normalize to E.164 without '+': 573001234567
+function hashPhone(phone: string, prefijo: string): string {
+  // E.164 sin '+': 573001234567 en Colombia, 593991234567 en Ecuador. El 0
+  // inicial de los celulares ecuatorianos (09…) no va en el formato
+  // internacional.
   const digits = phone.replace(/\D/g, "");
-  const normalized = digits.startsWith("57") ? digits : `57${digits}`;
+  const normalized = digits.startsWith(prefijo) ? digits : `${prefijo}${digits.replace(/^0/, "")}`;
   return createHash("sha256").update(normalized).digest("hex");
 }
 
 interface PurchaseEventInput {
+  /** País del pedido; decide a qué pixel va. Por omisión, Colombia. */
+  pais?: Pais;
   orderId: string;
   email: string;
   phone?: string;
@@ -51,8 +75,10 @@ function normalizeGeo(value: string): string {
 }
 
 export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void> {
+  const pais: Pais = input.pais ?? "co";
+  const { pixelId: PIXEL_ID, token: ACCESS_TOKEN, prefijo, url } = PAISES[pais];
   if (!PIXEL_ID || !ACCESS_TOKEN) {
-    console.warn("[Meta CAPI] Missing META_PIXEL_ID or META_CONVERSIONS_TOKEN — skipping");
+    console.warn(`[Meta CAPI] Falta el pixel o el token de ${pais} — no se envía`);
     return;
   }
 
@@ -63,13 +89,13 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
     // pedidos de Mercado Pago.
     external_id: [sha256(input.email)],
   };
-  if (input.phone) userData.ph = [hashPhone(input.phone)];
+  if (input.phone) userData.ph = [hashPhone(input.phone, prefijo)];
   if (input.firstName) userData.fn = [sha256(input.firstName)];
   if (input.lastName) userData.ln = [sha256(input.lastName)];
   if (input.city) userData.ct = [sha256(normalizeGeo(input.city))];
   if (input.state) userData.st = [sha256(normalizeGeo(input.state))];
-  // Toda la operación es Colombia; el país es una señal más, y gratis.
-  userData.country = [sha256("co")];
+  // El país es una señal más para emparejar, y gratis.
+  userData.country = [sha256(pais)];
   if (input.clientIp) userData.client_ip_address = input.clientIp;
   if (input.clientUserAgent) userData.client_user_agent = input.clientUserAgent;
   if (input.fbp) userData.fbp = input.fbp;
@@ -81,7 +107,7 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
         event_name: "Purchase",
         event_time: Math.floor(Date.now() / 1000),
         action_source: "website",
-        event_source_url: input.eventSourceUrl ?? "https://checkoutfem.com/checkout",
+        event_source_url: input.eventSourceUrl ?? url,
         event_id: `purchase_${input.orderId}`, // dedup con pixel browser
         user_data: userData,
         custom_data: {
@@ -126,7 +152,7 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<void
     try {
       const { events_received, fbtrace_id } = JSON.parse(cuerpo);
       console.log(
-        `[Meta CAPI] Purchase ${input.orderId} — recibidos: ${events_received}, ` +
+        `[Meta CAPI] Purchase ${pais} ${input.orderId} — recibidos: ${events_received}, ` +
           `parámetros: ${Object.keys(userData).length}, fbtrace: ${fbtrace_id}`
       );
     } catch {

@@ -46,10 +46,15 @@ function getGlobal<T>(name: string): T | null {
 }
 
 /** Meta Pixel — dispara `fbq('track', event)` cuando el pixel esté listo. */
-export function trackMeta(event: string, params?: Record<string, unknown>): () => void {
+export function trackMeta(
+  event: string,
+  params?: Record<string, unknown>,
+  /** `{ eventID }` para que Meta deduplique contra el mismo evento enviado por CAPI. */
+  opciones?: { eventID: string }
+): () => void {
   return whenAvailable<PixelFn>(
     () => getGlobal<PixelFn>("fbq"),
-    (fbq) => fbq("track", event, params)
+    (fbq) => (opciones ? fbq("track", event, params, opciones) : fbq("track", event, params))
   );
 }
 

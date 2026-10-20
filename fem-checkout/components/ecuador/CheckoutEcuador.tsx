@@ -29,6 +29,8 @@ import {
   type PresentacionEC,
 } from "@/lib/productos-ecuador";
 import { cedulaValidaEC, normalizarCelularEC } from "@/lib/datos-ecuador";
+import { asegurarIdsMeta } from "@/lib/meta-tracking";
+import { trackMeta } from "@/lib/pixels";
 
 const CLAVE_IDEMPOTENCIA = "fem-ec-idem";
 
@@ -71,6 +73,19 @@ export default function CheckoutEcuador({
   // el formulario de forma nativa y recargaría con los datos en la URL.
   const [hidratado, setHidratado] = useState(false);
   useEffect(() => setHidratado(true), []);
+
+  // InitiateCheckout al abrir, contra el pixel de Ecuador (el layout lo elige
+  // por la ruta). Los identificadores se fijan antes, porque el `fbclid` solo
+  // viene en la URL de la primera visita.
+  useEffect(() => {
+    asegurarIdsMeta();
+    return trackMeta("InitiateCheckout", {
+      value: presentacionInicial.precio,
+      currency: "USD",
+      content_ids: [`ec-${presentacionInicial.slug}`],
+      content_type: "product",
+    });
+  }, [presentacionInicial]);
 
   // Bloqueo síncrono contra el doble toque. `enviando` es estado y React lo
   // aplica en el siguiente render, que llega tarde para dos toques seguidos.
@@ -155,6 +170,7 @@ export default function CheckoutEcuador({
           presentacion: presentacion.slug,
           idempotencyKey: idem || undefined,
           eventSourceUrl: window.location.href,
+          ...asegurarIdsMeta(),
         }),
       });
       const datos = await res.json().catch(() => null);
@@ -169,6 +185,14 @@ export default function CheckoutEcuador({
       }
 
       try { sessionStorage.removeItem(CLAVE_IDEMPOTENCIA); } catch {}
+      // Mismo event_id que el del servidor: Meta cuenta la compra una sola vez.
+      trackMeta("Purchase", {
+        value: datos.total,
+        currency: "USD",
+        content_ids: [`ec-${presentacion.slug}`],
+        content_type: "product",
+        num_items: presentacion.unidades,
+      }, { eventID: `purchase_${datos.pedido_id}` });
       setListo({ id: datos.pedido_id, total: datos.total });
     } catch {
       setErrorEnvio("No pudimos conectarnos. Revisa tu internet e intenta de nuevo.");

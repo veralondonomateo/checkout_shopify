@@ -51,7 +51,9 @@ export default function RootLayout({
           t.src=v;s=b.getElementsByTagName(e)[0];
           s.parentNode.insertBefore(t,s)}(window, document,'script',
           'https://connect.facebook.net/en_US/fbevents.js');
-          fbq('init', '1382746760142604');
+          // Ecuador (/ec/...) tiene su propio pixel; el de Colombia no se
+          // carga ahí para que sus datos queden limpios.
+          fbq('init', location.pathname.indexOf('/ec/') === 0 ? '2200302204697951' : '1382746760142604');
           fbq('track', 'PageView');
         `}</Script>
         <noscript>
