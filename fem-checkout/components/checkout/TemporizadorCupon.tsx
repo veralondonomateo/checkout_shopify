@@ -20,11 +20,14 @@ export const MINUTOS_CUPON = 10;
 export default function TemporizadorCupon({
   codigo,
   porcentaje,
+  paraClientas = false,
   onExpirar,
 }: {
   codigo: string;
   /** 10 para un 10 %. */
   porcentaje: number;
+  /** Link para clientas que ya compraron: la barra lo dice desde la primera línea. */
+  paraClientas?: boolean;
   onExpirar: () => void;
 }) {
   const [restante, setRestante] = useState(MINUTOS_CUPON * 60_000);
@@ -62,9 +65,20 @@ export default function TemporizadorCupon({
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2.5">
         <div className="flex items-center justify-between gap-3 mb-1.5">
           <p className="text-[11px] sm:text-xs text-gray-600 leading-snug">
-            <span className="font-semibold text-gray-900">{porcentaje}% de descuento</span>{" "}
-            <span className="text-gray-400">({codigo})</span> ·{" "}
-            {apurando ? "está por vencer" : "reservado para ti"}
+            {paraClientas ? (
+              <>
+                <span className="font-semibold text-gray-900">Exclusivo para clientas FEM:</span>{" "}
+                {apurando
+                  ? `tu ${porcentaje}% está por vencer`
+                  : `tu ${porcentaje}% está reservado solo por unos minutos`}
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-gray-900">{porcentaje}% de descuento</span>{" "}
+                <span className="text-gray-400">({codigo})</span> ·{" "}
+                {apurando ? "está por vencer" : "reservado para ti"}
+              </>
+            )}
           </p>
           <span
             className="text-sm font-bold tabular-nums flex-shrink-0 transition-colors"

@@ -20,6 +20,10 @@ export const COUPON_CODES: Record<string, number> = {
   // para poder medir cuántas ventas trajo esa operación y poder apagarlo sin
   // tocar los cupones que se usan en otros canales.
   VUELVE10: 0.1,
+  // Campaña a clientas que ya compraron (link con &clientas=1). Va aparte de
+  // NEW10 porque casi 10.000 clientas ya gastaron ese, y se les rechazaría al
+  // pagar después de haber armado el pedido.
+  GRACIAS10: 0.1,
 };
 
 /** Máximo de usos por cliente (email). Sin entrada aquí = sin límite. */
@@ -27,6 +31,7 @@ export const COUPON_USAGE_LIMITS: Record<string, number> = {
   NEW10: 1,
   QUIEROFEM: 2,
   VUELVE10: 1,
+  GRACIAS10: 1,
 };
 
 /** Normaliza como se guarda en la base: sin espacios y en mayúsculas. */

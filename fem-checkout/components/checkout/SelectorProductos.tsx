@@ -41,6 +41,7 @@ export default function SelectorProductos({
   onQuitar,
   descuento,
   paraClientas,
+  usosMax,
 }: {
   catalogo: CheckoutProduct[];
   /** Cantidad en el carrito por id de producto. */
@@ -51,6 +52,8 @@ export default function SelectorProductos({
   descuento: number;
   /** `?clientas=1`: el link va a quien ya compró, y el saludo lo reconoce. */
   paraClientas: boolean;
+  /** Usos permitidos por clienta; undefined = sin límite. */
+  usosMax?: number;
 }) {
   if (catalogo.length === 0) return null;
 
@@ -79,9 +82,20 @@ export default function SelectorProductos({
             </h2>
             <p className="text-xs text-gray-600 mt-1">
               {paraClientas
-                ? "Gracias por confiar en nosotros. El descuento ya está aplicado: elige tus productos favoritos y verás el ahorro en el total."
+                ? "Ya sabes lo que FEM hace por ti. Por eso este descuento es solo para clientas como tú: ya está aplicado, elige tus favoritos y verás el ahorro en el total."
                 : "El descuento ya está aplicado: elige tus productos y verás el ahorro en el total."}
             </p>
+            {/*
+              Escasez solo con lo que es cierto: el contador sí quita el
+              descuento al llegar a cero y el límite de usos lo impone el
+              servidor. Nada de "quedan 3 unidades" inventado.
+            */}
+            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-medium text-gray-700">
+              <li>⏳ Reservado por tiempo limitado</li>
+              {usosMax === 1 && <li>🔒 Válido una sola vez</li>}
+              {usosMax !== undefined && usosMax > 1 && <li>🔒 Válido {usosMax} veces</li>}
+              {paraClientas && <li>💛 Solo para clientas FEM</li>}
+            </ul>
           </div>
         ) : null}
 

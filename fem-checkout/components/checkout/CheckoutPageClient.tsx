@@ -10,7 +10,7 @@ import OrderSummary from "./OrderSummary";
 import MobileOrderToggle from "./MobileOrderToggle";
 import { trackMeta, trackTikTok } from "@/lib/pixels";
 import { asegurarIdsMeta } from "@/lib/meta-tracking";
-import { COUPON_CODES } from "@/lib/coupons";
+import { COUPON_CODES, COUPON_USAGE_LIMITS } from "@/lib/coupons";
 import SelectorProductos, { precioDe } from "./SelectorProductos";
 import TemporizadorCupon from "./TemporizadorCupon";
 import { VARIANT_IDS, PRINCIPAL_FALLBACK_PRICE } from "@/lib/catalog";
@@ -336,6 +336,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
             <TemporizadorCupon
               codigo={cuponUrlValido}
               porcentaje={Math.round((COUPON_CODES[cuponUrlValido] ?? 0) * 100)}
+              paraClientas={searchParams.get("clientas") === "1"}
               onExpirar={() => {
                 // Se quita el descuento de verdad. Ver la nota del componente:
                 // el servidor no impone la caducidad, así que quien reescriba
@@ -352,6 +353,7 @@ export default function CheckoutPageClient({ shopifyProduct, gomitasProduct, jab
             onQuitar={quitarProducto}
             descuento={discountRate}
             paraClientas={searchParams.get("clientas") === "1"}
+            usosMax={COUPON_USAGE_LIMITS[coupon.trim().toUpperCase()]}
           />
         </>
       )}
