@@ -51,6 +51,25 @@ const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://checkoutfem.com";
 
 /**
+ * Dominios desde los que se sirve el checkout. El de la tienda existe porque
+ * el navegador de Instagram y Facebook avisa "¿seguro que quieres salir?" al
+ * pasar de femprobiotics.co a checkoutfem.com; con un subdominio de la tienda
+ * no hay salida.
+ */
+const DOMINIOS_CHECKOUT = new Set(["checkoutfem.com", "checkout.femprobiotics.co"]);
+
+/**
+ * A dónde vuelve la clienta después de Mercado Pago: al mismo dominio donde
+ * compró. La página de gracias lee el pedido de sessionStorage, que es por
+ * dominio; si volviera al otro, llegaría sin datos y sin el Purchase del pixel.
+ * Un host que no es nuestro (o un preview) cae al dominio principal.
+ */
+function origenDe(req: NextRequest): string {
+  const host = req.headers.get("host")?.toLowerCase() ?? "";
+  return DOMINIOS_CHECKOUT.has(host) ? `https://${host}` : APP_URL;
+}
+
+/**
  * Ventana en la que dos pedidos con el mismo contenido se consideran el mismo
  * intento. Coincide con el TTL de la clave de idempotencia del navegador.
  */
@@ -441,9 +460,9 @@ export async function POST(req: NextRequest) {
         },
         // El order_id viaja en la back_url para que MP lo devuelva en el redirect
         back_urls: {
-          success: `${APP_URL}/checkout/thank-you?status=success&order_id=${orderId}`,
-          failure: `${APP_URL}/checkout/thank-you?status=failure&order_id=${orderId}`,
-          pending: `${APP_URL}/checkout/thank-you?status=pending&order_id=${orderId}`,
+          success: `${origenDe(req)}/checkout/thank-you?status=success&order_id=${orderId}`,
+          failure: `${origenDe(req)}/checkout/thank-you?status=failure&order_id=${orderId}`,
+          pending: `${origenDe(req)}/checkout/thank-you?status=pending&order_id=${orderId}`,
         },
         notification_url: `${APP_URL}/api/webhooks/mercadopago`,
         auto_return: "approved",
